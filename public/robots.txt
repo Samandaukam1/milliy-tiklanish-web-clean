@@ -1,0 +1,9 @@
+User-agent: *
+Allow: /
+
+# Block API routes from indexing
+Disallow: /api/
+Disallow: /payment-result
+
+# Sitemaps
+Sitemap: https://milliytiklanish.uz/sitemap.xml

@@ -1,0 +1,58 @@
+{
+  "tabs": {
+    "home": "Бош сахифа",
+    "articles": "Мақолалар",
+    "radio": "Радио",
+    "media": "Медиа",
+    "profile": "Профил"
+  },
+  "profile": {
+    "freeSubscription": "БЕПУЛ ОБУНА",
+    "premium": "ПРЕМИУМ",
+    "vip": "ВИП КЛУБИ",
+    "read": "Ўқилди",
+    "listened": "Эшитиш дақ.",
+    "saved": "Сақланганлар",
+    "upgradeTitle": "МИЛЛИЙ ТИКЛАНИШ+",
+    "upgradeSubtitle": "Премиумга ўтиш",
+    "upgradeDesc": "Рекламасиз ўқиш, ВИП мақолалар ва аудио версиялар",
+    "subscribe": "Обуна",
+    "settings": "Созламалар",
+    "language": "Тил",
+    "theme": "Мавзу",
+    "light": "Ёруғ",
+    "dark": "Қоронғу",
+    "notifications": "Билдиришномалар",
+    "downloads": "Юкламалар",
+    "share": "Улашиш",
+    "privacy": "Махфийлик",
+    "about": "Ҳақида"
+  },
+  "languageNames": {
+    "uz": "Ўзбек (Лотин)",
+    "uz_cy": "Ўзбек (Кирилл)",
+    "ru": "Русский",
+    "en": "English"
+  },
+  "article": {
+    "readTime": "дақ",
+    "readTimeFull": "дақ ўқиш",
+    "by": "томонидан",
+    "published": "Нашр қилинган",
+    "save": "Сақлаш",
+    "share": "Улашиш",
+    "listen": "Эшитиш",
+    "author": "Муаллиф"
+  },
+  "common": {
+    "loading": "Юкланмоқда...",
+    "error": "Хатолик",
+    "retry": "Қайта уриниш",
+    "noData": "Маълумот йўқ",
+    "search": "Қидириш",
+    "cancel": "Бекор қилиш",
+    "ok": "OK",
+    "selectLanguage": "Тилни танланг",
+    "back": "Орқага"
+  }
+}

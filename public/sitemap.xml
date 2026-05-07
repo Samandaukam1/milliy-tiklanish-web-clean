@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"
+        xmlns:news="http://www.google.com/schemas/sitemap-news/0.9">
+
+  <!-- Static pages -->
+  <url>
+    <loc>https://milliytiklanish.uz/</loc>
+    <changefreq>hourly</changefreq>
+    <priority>1.0</priority>
+  </url>
+  <url>
+    <loc>https://milliytiklanish.uz/articles</loc>
+    <changefreq>hourly</changefreq>
+    <priority>0.9</priority>
+  </url>
+  <url>
+    <loc>https://milliytiklanish.uz/radio</loc>
+    <changefreq>daily</changefreq>
+    <priority>0.7</priority>
+  </url>
+  <url>
+    <loc>https://milliytiklanish.uz/media</loc>
+    <changefreq>daily</changefreq>
+    <priority>0.7</priority>
+  </url>
+  <url>
+    <loc>https://milliytiklanish.uz/authors</loc>
+    <changefreq>weekly</changefreq>
+    <priority>0.6</priority>
+  </url>
+  <url>
+    <loc>https://milliytiklanish.uz/archive</loc>
+    <changefreq>weekly</changefreq>
+    <priority>0.5</priority>
+  </url>
+
+  <!--
+    NOTE: Dynamic article URLs (/article/[id]) are generated server-side.
+    For a full sitemap with article URLs, implement the /api/sitemap-articles+api.ts
+    endpoint to fetch and list all published article IDs, then reference it here:
+
+    <sitemap>
+      <loc>https://milliytiklanish.uz/api/sitemap-articles</loc>
+    </sitemap>
+  -->
+
+</urlset>

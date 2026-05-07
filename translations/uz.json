@@ -1,0 +1,88 @@
+{
+  "tabs": {
+    "home": "Bosh sahifa",
+    "articles": "Maqolalar",
+    "radio": "Radio",
+    "media": "Media",
+    "profile": "Profil"
+  },
+  "profile": {
+    "freeSubscription": "BEPUL OBUNA",
+    "premium": "PREMIUM",
+    "vip": "VIP KLUBI",
+    "read": "O'qildi",
+    "listened": "Eshitish daq.",
+    "saved": "Saqlanganlar",
+    "upgradeTitle": "MILLIY TIKLANISH+",
+    "upgradeSubtitle": "Premiumga o'tish",
+    "upgradeDesc": "Reklamasiz o'qish, VIP maqolalar va audio versiyalar",
+    "subscribe": "Obuna",
+    "settings": "Sozlamalar",
+    "language": "Til",
+    "theme": "Mavzu",
+    "light": "Yorug'",
+    "dark": "Qorong'u",
+    "notifications": "Bildirishnomalar",
+    "downloads": "Yuklamalar",
+    "share": "Ulashish",
+    "privacy": "Maxfiylik",
+    "about": "Haqida"
+  },
+  "languageNames": {
+    "uz": "O'zbek (Lotin)",
+    "uz_cy": "O'zbek (Kirill)",
+    "ru": "Русский",
+    "en": "English"
+  },
+  "article": {
+    "readTime": "daq",
+    "readTimeFull": "daq o'qish",
+    "by": "tomonidan",
+    "published": "Nashr qilingan",
+    "save": "Saqlash",
+    "share": "Ulashish",
+    "listen": "Eshitish",
+    "author": "Muallif"
+  },
+  "common": {
+    "loading": "Yuklanmoqda...",
+    "error": "Xatolik",
+    "retry": "Qayta urinish",
+    "noData": "Ma'lumot yo'q",
+    "search": "Qidirish",
+    "cancel": "Bekor qilish",
+    "ok": "OK",
+    "selectLanguage": "Tilni tanlang",
+    "back": "Orqaga"
+  },
+  "premium": {
+    "subscribe": "Premiumga obuna bo'ling",
+    "subscribeCta": "Obuna bo'lish",
+    "buySingle": "Faqat shu maqolani sotib oling",
+    "buyBtn": "Sotib olish",
+    "lockedTitle": "Premium Maqola",
+    "lockedDesc": "Bu maqola faqat premium obunachilarga mavjud.",
+    "hint": "29 000 so'm / oy · Istalgan vaqt bekor qiling"
+  },
+  "editorial": {
+    "title": "Tahririyat haqida",
+    "btn": "Tahririyat haqida"
+  },
+  "issue": {
+    "label": "Gazeta Soni",
+    "toc": "Mundarija",
+    "pdf": "PDF yuklab olish",
+    "read": "O'qish",
+    "currentIssue": "Joriy son",
+    "archive": "Maqolalar arxivi",
+    "allIssues": "Barcha sonlar"
+  },
+  "authors": {
+    "topTitle": "Eng ko'p o'qilgan mualliflar",
+    "seeAll": "Barchasi",
+    "articles": "ta maqola"
+  },
+  "social": {
+    "followUs": "Biz bilan bo'ling"
+  }
+}
