@@ -198,7 +198,6 @@ export default function RootLayout() {
         <Stack.Screen name="authors" options={{ headerShown: false }} />
         <Stack.Screen name="archive" options={{ headerShown: false }} />
         <Stack.Screen name="issue/[id]" options={{ headerShown: false }} />
-        <Stack.Screen name="modal" options={{ presentation: "modal" }} />
         <Stack.Screen name="login" options={{ headerShown: false }} />
         <Stack.Screen name="register" options={{ headerShown: false }} />
         <Stack.Screen name="phone-verification" options={{ headerShown: false, presentation: "modal" }} />

@@ -29,13 +29,13 @@
     },
     "web": {
       "favicon": "./assets/images/favicon.png",
-      "output": "server"
+      "output": "static"
     },
     "plugins": [
       [
         "expo-router",
         {
-          "origin": "https://rork.com/"
+          "origin": "https://milliy-tiklanish-web-clean.vercel.app"
         }
       ],
       "expo-font",
@@ -47,7 +47,7 @@
     },
     "extra": {
       "router": {
-        "origin": "https://rork.com/"
+        "origin": "https://milliy-tiklanish-web-clean.vercel.app"
       },
       "eas": {
         "projectId": "7d2234a1-be1a-40d0-a0bc-bfebf95a9c69"

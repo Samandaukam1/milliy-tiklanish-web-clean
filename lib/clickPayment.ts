@@ -24,7 +24,7 @@ export async function getDeviceUserId(): Promise<string> {
 }
 
 // ─── API base URL ─────────────────────────────────────────────────────────────
-// Set EXPO_PUBLIC_API_URL in your .env to the deployed app URL (e.g. https://rork.com).
+// Set EXPO_PUBLIC_API_URL in your .env to the deployed app URL.
 // On web the default empty string results in relative URLs (same origin).
 
 function getApiBase(): string {
