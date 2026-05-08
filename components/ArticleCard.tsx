@@ -13,7 +13,7 @@ import { useApp } from "@/providers/AppProvider";
 import { useLanguage } from "@/providers/LanguageProvider";
 import { useColors } from "@/utils/useColors";
 
-type Variant = "hero" | "large" | "compact" | "list" | "editorial";
+type Variant = "hero" | "large" | "compact" | "list" | "editorial" | "newspaper";
 
 interface Props {
   article: AppArticle;
@@ -163,6 +163,45 @@ function ArticleCardComponent({ article, variant = "large", rank, containerStyle
           </View>
         </View>
         <Image source={{ uri: article.cover }} style={styles.listImage} contentFit="cover" />
+      </Pressable>
+    );
+  }
+
+  if (variant === "newspaper") {
+    return (
+      <Pressable
+        onPress={open}
+        style={({ hovered }: any) => [
+          styles.news,
+          hovered && styles.newsHovered,
+          containerStyle,
+        ]}
+        testID={`newspaper-${article.id}`}
+      >
+        <Image source={{ uri: article.cover }} style={styles.newsImage} contentFit="cover" />
+        <View style={styles.newsBody}>
+          <View style={styles.rowBetween}>
+            <Text style={styles.categoryLabel}>{categoryName.toUpperCase()}</Text>
+            {article.tier !== "free" && (
+              <View style={styles.newsPremium}>
+                <Crown size={11} color={Palette.gold} />
+              </View>
+            )}
+          </View>
+          <Text style={styles.newsTitle} numberOfLines={3}>
+            {article.title}
+          </Text>
+          {!!article.excerpt && (
+            <Text style={styles.newsExcerpt} numberOfLines={2}>
+              {article.excerpt}
+            </Text>
+          )}
+          <View style={styles.largeMeta}>
+            <Text style={styles.metaSmall}>{authorName}</Text>
+            <View style={styles.dotBeige} />
+            <Text style={styles.metaSmall}>{relativeUz(article.publishedAt)}</Text>
+          </View>
+        </View>
       </Pressable>
     );
   }
@@ -448,6 +487,50 @@ function createStyles(colors: ReturnType<typeof import("@/utils/useColors").useC
   },
   listMeta: { flexDirection: "row", alignItems: "center", gap: 8, marginTop: 4 },
   listImage: { width: 120, height: 120, borderRadius: 16 },
+  news: {
+    width: "100%",
+    alignSelf: "flex-start",
+    backgroundColor: colors.card,
+    borderRadius: 18,
+    overflow: "hidden",
+    borderWidth: 1,
+    borderColor: colors.border,
+    ...Platform.select({
+      web: {
+        boxShadow: "0 2px 12px rgba(0,0,0,0.06)",
+        transitionProperty: "box-shadow, transform",
+        transitionDuration: "180ms",
+        cursor: "pointer",
+      },
+    }),
+  },
+  newsHovered: {
+    ...Platform.select({
+      web: {
+        boxShadow: "0 10px 28px rgba(0,0,0,0.12)",
+        transform: [{ translateY: -2 }],
+      },
+    }),
+  },
+  newsImage: { width: "100%", aspectRatio: 16 / 9 },
+  newsBody: { padding: 15, gap: 7 },
+  newsTitle: {
+    fontSize: 18,
+    lineHeight: 24,
+    fontFamily: Fonts.serif,
+    fontWeight: "700",
+    color: colors.text,
+  },
+  newsExcerpt: { color: colors.textSecondary, fontSize: 12, lineHeight: 18 },
+  newsPremium: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(196, 154, 65, 0.1)",
+    flexShrink: 0,
+  },
   categoryLabel: { color: Palette.beige, fontSize: 10, letterSpacing: 1.5, fontWeight: "700" },
   metaSmall: { color: colors.textSecondary, fontSize: 11 },
   });

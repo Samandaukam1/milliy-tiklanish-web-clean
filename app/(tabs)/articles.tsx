@@ -44,7 +44,9 @@ export default function ArticlesScreen() {
   const isDesktop = width >= 900;
   const isWebDesktop = Platform.OS === "web" && isDesktop;
   const isWideDesktop = width >= 1280;
-  const numColumns = isWideDesktop ? 3 : isDesktop ? 2 : 1;
+  const isTablet = width >= 720;
+  const articleColumnCount = isWideDesktop ? 3 : isTablet ? 2 : 1;
+  const useNewspaperColumns = articleColumnCount > 1;
 
   useEffect(() => {
     if (params.cat) setActiveCat(params.cat);
@@ -88,6 +90,30 @@ export default function ArticlesScreen() {
     );
   }, [articles, sortBy]);
 
+  const articleColumns = React.useMemo(() => {
+    const columns = Array.from({ length: articleColumnCount }, () => [] as { article: AppArticle; index: number }[]);
+    sortedArticles.forEach((article, index) => {
+      columns[index % articleColumnCount].push({ article, index });
+    });
+    return columns;
+  }, [articleColumnCount, sortedArticles]);
+
+  const currentIssueHeader =
+    latestIssue && activeCat === "all" ? (
+      <View style={{ marginBottom: 24 }}>
+        <SectionTitle kicker="Gazeta Soni" title="Joriy son" />
+        <View style={[styles.currentIssueWrap, { marginTop: 14 }]}>
+          {isWebDesktop ? (
+            <WebCurrentIssueCard issue={latestIssue} articles={issueArticles} />
+          ) : isDesktop ? (
+            <IssueCard issue={latestIssue} articles={issueArticles} showTableOfContents={true} />
+          ) : (
+            <IssueCardSimple issue={latestIssue} />
+          )}
+        </View>
+      </View>
+    ) : null;
+
   useEffect(() => { loadCategories(); }, [loadCategories]);
   useEffect(() => { loadArticles(); }, [loadArticles]);
 
@@ -97,7 +123,7 @@ export default function ArticlesScreen() {
       <View style={[styles.header, isDesktop && styles.headerDesktop]}>
         <View style={{ flex: 1 }}>
           <Text style={styles.kicker}>MAQOLALAR</Text>
-          <Text style={[styles.title, { color: colors.text }]}>Barcha yo'nalishlar</Text>
+          <Text style={[styles.title, { color: colors.text }]}>{"Barcha yo'nalishlar"}</Text>
         </View>
         <Pressable
           testID="articles-search"
@@ -160,41 +186,46 @@ export default function ArticlesScreen() {
         <View style={{ flex: 1, alignItems: "center", justifyContent: "center" }}>
           <Text style={{ color: Palette.textSecondary }}>Hozircha maqolalar mavjud emas</Text>
         </View>
+      ) : useNewspaperColumns ? (
+        <ScrollView
+          contentContainerStyle={[
+            styles.listContainer,
+            isDesktop && styles.desktopContainer,
+            styles.newspaperScrollContainer,
+          ]}
+          showsVerticalScrollIndicator={false}
+        >
+          {currentIssueHeader}
+          <View style={styles.newspaperGrid}>
+            {articleColumns.map((column, columnIndex) => (
+              <View key={`article-column-${columnIndex}`} style={styles.newspaperColumn}>
+                {column.map(({ article, index }) => (
+                  <ArticleCard
+                    key={article.id}
+                    article={article}
+                    variant={index === 0 && activeCat === "all" ? "large" : "newspaper"}
+                  />
+                ))}
+              </View>
+            ))}
+          </View>
+        </ScrollView>
       ) : (
         <FlatList
           data={sortedArticles}
           keyExtractor={(i) => i.id}
-          numColumns={numColumns}
-          key={numColumns}
-          columnWrapperStyle={numColumns > 1 ? styles.columnWrapper : undefined}
+          numColumns={1}
+          key="articles-single-column"
           contentContainerStyle={[
             styles.listContainer,
             isDesktop && styles.desktopContainer,
           ]}
-          ListHeaderComponent={
-            latestIssue && activeCat === "all" ? (
-              <View style={{ marginBottom: 24 }}>
-                <SectionTitle kicker="Gazeta Soni" title="Joriy son" />
-                <View style={[styles.currentIssueWrap, { marginTop: 14 }]}>
-                  {isWebDesktop ? (
-                    <WebCurrentIssueCard issue={latestIssue} articles={issueArticles} />
-                  ) : isDesktop ? (
-                    <IssueCard issue={latestIssue} articles={issueArticles} showTableOfContents={true} />
-                  ) : (
-                    <IssueCardSimple issue={latestIssue} />
-                  )
-                  }
-                </View>
-              </View>
-            ) : null
-          }
+          ListHeaderComponent={currentIssueHeader}
           renderItem={({ item, index }) => (
-            <View style={numColumns > 1 ? styles.cardWrapper : undefined}>
-              <ArticleCard
-                article={item}
-                variant={index === 0 && activeCat === "all" ? "large" : "list"}
-              />
-            </View>
+            <ArticleCard
+              article={item}
+              variant={index === 0 && activeCat === "all" ? "large" : "list"}
+            />
           )}
           ItemSeparatorComponent={() => <View style={styles.divider} />}
           showsVerticalScrollIndicator={false}
@@ -630,6 +661,17 @@ const styles = StyleSheet.create({
   webButtonPressed: {
     transform: [{ scale: 0.98 }],
   },
-  columnWrapper: { gap: 20, marginBottom: 20 },
-  cardWrapper: { flex: 1, minWidth: 0 },
+  newspaperScrollContainer: { gap: 0 },
+  newspaperGrid: {
+    width: "100%",
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 20,
+  },
+  newspaperColumn: {
+    flex: 1,
+    minWidth: 0,
+    alignSelf: "flex-start",
+    gap: 20,
+  },
 });
