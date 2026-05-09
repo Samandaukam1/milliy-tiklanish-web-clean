@@ -6,7 +6,7 @@ import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { StatusBar } from "expo-status-bar";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import { View, StyleSheet, Platform, Pressable, Text, Image, useWindowDimensions } from "react-native";
-import { Search, Bell, User, Send } from "lucide-react-native";
+import { Search, Bell, User, Send, Heart } from "lucide-react-native";
 import logo from "../assets/images/milliy-tiklanish-logo.jpg";
 import { AppProvider } from "@/providers/AppProvider";
 import { PlayerProvider } from "@/providers/PlayerProvider";
@@ -140,6 +140,17 @@ export default function RootLayout() {
             </Pressable>
 
             <Pressable
+              onPress={() => router.push("/donat" as any)}
+              style={({ hovered }: any) => [
+                styles.donatBtn,
+                { backgroundColor: hovered ? "rgba(237,28,36,0.08)" : "transparent" },
+              ]}
+            >
+              <Heart size={13} color={Palette.red} strokeWidth={2.2} />
+              <Text style={styles.donatBtnText}>DONAT</Text>
+            </Pressable>
+
+            <Pressable
               onPress={() => router.push("/submit-article" as any)}
               style={({ hovered }: any) => [
                 styles.submitArticleBtn,
@@ -171,6 +182,7 @@ export default function RootLayout() {
             contentStyle: { backgroundColor: colors.background },
           }}
         >
+        <Stack.Screen name="index" options={{ headerShown: false }} />
         <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
         <Stack.Screen name="article/[id]" options={{ headerShown: false, animation: "fade" }} />
         <Stack.Screen
@@ -351,5 +363,24 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: "700",
     letterSpacing: 0.1,
+  },
+  donatBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    borderRadius: 8,
+    borderWidth: 1.5,
+    borderColor: Palette.red,
+    paddingHorizontal: 13,
+    paddingVertical: 8,
+    ...Platform.select({
+      web: { transitionProperty: "background-color", transitionDuration: "150ms", cursor: "pointer" },
+    }),
+  },
+  donatBtnText: {
+    color: Palette.red,
+    fontSize: 13,
+    fontWeight: "800",
+    letterSpacing: 0.8,
   },
 });

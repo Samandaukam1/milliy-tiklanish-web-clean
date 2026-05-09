@@ -1,10 +1,11 @@
 import { router, useLocalSearchParams } from "expo-router";
-import { Crown, Download, FileText, Newspaper, Search } from "lucide-react-native";
+import { Crown, Download, FileText, Newspaper, Search, X } from "lucide-react-native";
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import {
   ActivityIndicator,
   FlatList,
   Linking,
+  Modal,
   Platform,
   Pressable,
   ScrollView,
@@ -23,6 +24,7 @@ import { IssueCardSimple } from "@/components/IssueCardSimple";
 import { SectionTitle } from "@/components/SectionTitle";
 import { fetchArticles, fetchCategories, fetchIssues, fetchIssueArticlesFull } from "@/lib/services";
 import { useLanguage } from "@/providers/LanguageProvider";
+import { useApp } from "@/providers/AppProvider";
 import { useColors } from "@/utils/useColors";
 import type { AppArticle, AppCategory, AppIssue } from "@/lib/types";
 
@@ -242,8 +244,16 @@ function WebCurrentIssueCard({
   issue: AppIssue;
   articles: AppArticle[];
 }) {
+  const { subscription } = useApp();
+  const isPremium = subscription !== "free";
+  const [showPremiumPrompt, setShowPremiumPrompt] = useState(false);
+
   const openPdf = (e?: any) => {
     e?.stopPropagation?.();
+    if (!isPremium) {
+      setShowPremiumPrompt(true);
+      return;
+    }
     if (issue.pdfUrl) Linking.openURL(issue.pdfUrl).catch(() => {});
   };
 
@@ -256,14 +266,53 @@ function WebCurrentIssueCard({
   };
 
   return (
-    <Pressable
-      onPress={goToIssue}
-      style={({ pressed, hovered }: any) => [
-        styles.webIssueCard,
-        hovered && styles.webIssueCardHovered,
-        pressed && styles.webIssueCardPressed,
-      ]}
-    >
+    <>
+      {/* Premium PDF prompt modal */}
+      <Modal
+        visible={showPremiumPrompt}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowPremiumPrompt(false)}
+      >
+        <Pressable
+          style={styles.pdfPremiumOverlay}
+          onPress={() => setShowPremiumPrompt(false)}
+        >
+          <Pressable
+            style={styles.pdfPremiumCard}
+            onPress={(e) => e.stopPropagation()}
+          >
+            <View style={styles.pdfPremiumIconWrap}>
+              <Crown size={26} color={Palette.white} />
+            </View>
+            <Text style={styles.pdfPremiumTitle}>Gazeta Premium</Text>
+            <Text style={styles.pdfPremiumText}>
+              {"Gazetaning PDF ko'rinishini yuklab olish uchun Gazeta Premium tarifiga obuna bo'ling."}
+            </Text>
+            <Pressable
+              onPress={() => { setShowPremiumPrompt(false); router.push("/subscribe"); }}
+              style={({ hovered }: any) => [styles.pdfPremiumBtn, hovered && { opacity: 0.88 }]}
+            >
+              <Text style={styles.pdfPremiumBtnText}>{"Premium obunani boshlash"}</Text>
+            </Pressable>
+            <Pressable
+              onPress={() => setShowPremiumPrompt(false)}
+              style={styles.pdfPremiumClose}
+            >
+              <X size={18} color={"#888"} />
+            </Pressable>
+          </Pressable>
+        </Pressable>
+      </Modal>
+
+      <Pressable
+        onPress={goToIssue}
+        style={({ pressed, hovered }: any) => [
+          styles.webIssueCard,
+          hovered && styles.webIssueCardHovered,
+          pressed && styles.webIssueCardPressed,
+        ]}
+      >
       <View style={styles.webIssueCoverShell}>
         <Image
           source={{ uri: issue.cover }}
@@ -329,13 +378,18 @@ function WebCurrentIssueCard({
                 pressed && styles.webButtonPressed,
               ]}
             >
-              <Download size={16} color={Palette.red} strokeWidth={2.2} />
+              {isPremium ? (
+                <Download size={16} color={Palette.red} strokeWidth={2.2} />
+              ) : (
+                <Crown size={16} color={Palette.red} strokeWidth={2.2} />
+              )}
               <Text style={styles.webPdfButtonText}>PDF</Text>
             </Pressable>
           )}
         </View>
       </View>
     </Pressable>
+    </>
   );
 }
 
@@ -660,6 +714,80 @@ const styles = StyleSheet.create({
   },
   webButtonPressed: {
     transform: [{ scale: 0.98 }],
+  },
+  // PDF Premium modal
+  pdfPremiumOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.52)",
+    alignItems: "center",
+    justifyContent: "center",
+    padding: 24,
+  },
+  pdfPremiumCard: {
+    backgroundColor: "#FFFFFF",
+    borderRadius: 24,
+    padding: 32,
+    maxWidth: 440,
+    width: "100%",
+    alignItems: "center",
+    gap: 12,
+    ...Platform.select({
+      web: { boxShadow: "0 24px 60px rgba(0,0,0,0.18)" } as any,
+    }),
+  },
+  pdfPremiumIconWrap: {
+    width: 58,
+    height: 58,
+    borderRadius: 29,
+    backgroundColor: Palette.red,
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 4,
+  },
+  pdfPremiumTitle: {
+    fontSize: 20,
+    fontFamily: Fonts.serif,
+    fontWeight: "800",
+    color: Palette.black,
+    textAlign: "center",
+  },
+  pdfPremiumText: {
+    fontSize: 14,
+    color: Palette.textSecondary,
+    lineHeight: 22,
+    textAlign: "center",
+    paddingHorizontal: 8,
+    marginBottom: 8,
+  },
+  pdfPremiumBtn: {
+    backgroundColor: Palette.red,
+    borderRadius: 12,
+    paddingHorizontal: 24,
+    paddingVertical: 13,
+    width: "100%",
+    alignItems: "center",
+    ...Platform.select({
+      web: { transitionProperty: "opacity", transitionDuration: "150ms", cursor: "pointer" } as any,
+    }),
+  },
+  pdfPremiumBtnText: {
+    color: Palette.white,
+    fontSize: 14,
+    fontWeight: "800",
+    letterSpacing: 0.2,
+  },
+  pdfPremiumClose: {
+    position: "absolute",
+    top: 14,
+    right: 14,
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    alignItems: "center",
+    justifyContent: "center",
+    ...Platform.select({
+      web: { cursor: "pointer" } as any,
+    }),
   },
   newspaperScrollContainer: { gap: 0 },
   newspaperGrid: {

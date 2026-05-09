@@ -475,9 +475,11 @@ export default function ArticleDetail() {
         ]}
       > 
         <View style={[styles.articleShell, isDesktop && styles.articleShellDesktop]}>
-          <View style={styles.brandLogoWrap}>
-            <RNImage source={brandLogo} style={styles.brandLogo} resizeMode="contain" />
-          </View>
+          {Platform.OS !== "web" && (
+            <View style={styles.brandLogoWrap}>
+              <RNImage source={brandLogo} style={styles.brandLogo} resizeMode="contain" />
+            </View>
+          )}
 
           <View style={styles.categoryRow}>
             <View style={styles.catChip}>
@@ -883,12 +885,7 @@ function EditorialSidebar({ articles }: { articles: AppArticle[] }) {
 
   return (
     <View
-      style={[
-        sidebarStyles.container,
-        {
-          ...Platform.select({ web: { position: "sticky" as any, top: 100, alignSelf: "flex-start" } }),
-        },
-      ]}
+      style={sidebarStyles.container}
     >
       <Text style={[sidebarStyles.heading, { color: colors.text }]}>
         Tahririyat tavsiya qiladi

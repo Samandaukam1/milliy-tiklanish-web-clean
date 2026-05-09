@@ -1,10 +1,12 @@
 import { Image } from "expo-image";
 import { router, Stack, useLocalSearchParams } from "expo-router";
-import { ArrowLeft, Download, ChevronRight } from "lucide-react-native";
+import { ArrowLeft, Crown, Download, ChevronRight } from "lucide-react-native";
 import React, { useCallback, useEffect, useState } from "react";
 import {
   ActivityIndicator,
   Linking,
+  Modal,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -17,12 +19,16 @@ import { Fonts } from "@/constants/fonts";
 import { ArticleCard } from "@/components/ArticleCard";
 import { fetchIssueById, fetchIssueArticlesFull } from "@/lib/services";
 import { useLanguage } from "@/providers/LanguageProvider";
+import { useApp } from "@/providers/AppProvider";
 import { useColors } from "@/utils/useColors";
 import type { AppArticle, AppIssue } from "@/lib/types";
 
 export default function IssueDetailPage() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const insets = useSafeAreaInsets();
+  const { subscription } = useApp();
+  const isPremium = subscription !== "free";
+  const [showPdfPrompt, setShowPdfPrompt] = useState(false);
   const { language } = useLanguage();
   const colors = useColors();
   const [issue, setIssue] = useState<AppIssue | null>(null);
@@ -70,6 +76,44 @@ export default function IssueDetailPage() {
     <View style={[styles.page, { paddingTop: insets.top, backgroundColor: colors.background }]}>
       <Stack.Screen options={{ headerShown: false }} />
 
+      {/* Premium PDF prompt modal (web only) */}
+      <Modal
+        visible={showPdfPrompt}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowPdfPrompt(false)}
+      >
+        <Pressable
+          style={styles.premiumPromptOverlay}
+          onPress={() => setShowPdfPrompt(false)}
+        >
+          <Pressable
+            style={styles.premiumPromptCard}
+            onPress={(e) => e.stopPropagation()}
+          >
+            <View style={styles.premiumPromptIcon}>
+              <Crown size={24} color={Palette.white} />
+            </View>
+            <Text style={styles.premiumPromptTitle}>Gazeta Premium</Text>
+            <Text style={styles.premiumPromptText}>
+              {"Gazetaning PDF ko'rinishini yuklab olish uchun Gazeta Premium tarifiga obuna bo'ling."}
+            </Text>
+            <Pressable
+              style={styles.premiumPromptBtn}
+              onPress={() => { setShowPdfPrompt(false); router.push("/subscribe"); }}
+            >
+              <Text style={styles.premiumPromptBtnText}>Premium obunani boshlash</Text>
+            </Pressable>
+            <Pressable
+              style={styles.premiumPromptCloseBtn}
+              onPress={() => setShowPdfPrompt(false)}
+            >
+              <Text style={{ color: Palette.textSecondary, fontSize: 13, fontWeight: "600" }}>Yopish</Text>
+            </Pressable>
+          </Pressable>
+        </Pressable>
+      </Modal>
+
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scroll}>
         {/* Hero */}
         <View style={styles.heroWrap}>
@@ -93,12 +137,24 @@ export default function IssueDetailPage() {
         {issue.pdfUrl && (
           <Pressable
             style={styles.pdfBtn}
-            onPress={() => Linking.openURL(issue.pdfUrl!).catch(() => {})}
+            onPress={() => {
+              if (Platform.OS === "web" && !isPremium) {
+                setShowPdfPrompt(true);
+                return;
+              }
+              Linking.openURL(issue.pdfUrl!).catch(() => {});
+            }}
           >
-            <Download size={18} color={Palette.white} />
+            {Platform.OS === "web" && !isPremium ? (
+              <Crown size={18} color={Palette.white} />
+            ) : (
+              <Download size={18} color={Palette.white} />
+            )}
             <Text style={styles.pdfBtnText}>PDF yuklab olish</Text>
           </Pressable>
         )}
+
+        {/* Premium PDF prompt (web only) */}
 
         {/* Table of contents / articles */}
         <View style={styles.section}>
@@ -271,5 +327,62 @@ const styles = StyleSheet.create({
   backLink: {
     marginTop: 16,
     padding: 12,
+  },
+  premiumPromptOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.52)",
+    alignItems: "center",
+    justifyContent: "center",
+    padding: 24,
+  },
+  premiumPromptCard: {
+    backgroundColor: "#FFFFFF",
+    borderRadius: 20,
+    padding: 28,
+    width: "100%",
+    maxWidth: 420,
+    alignItems: "center",
+    gap: 12,
+  },
+  premiumPromptIcon: {
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+    backgroundColor: Palette.red,
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 4,
+  },
+  premiumPromptTitle: {
+    fontSize: 19,
+    fontFamily: Fonts.serif,
+    fontWeight: "800",
+    color: Palette.black,
+    textAlign: "center",
+  },
+  premiumPromptText: {
+    fontSize: 13,
+    color: Palette.textSecondary,
+    lineHeight: 21,
+    textAlign: "center",
+    paddingHorizontal: 4,
+    marginBottom: 6,
+  },
+  premiumPromptBtn: {
+    backgroundColor: Palette.red,
+    borderRadius: 12,
+    paddingHorizontal: 22,
+    paddingVertical: 12,
+    width: "100%",
+    alignItems: "center",
+  },
+  premiumPromptBtnText: {
+    color: Palette.white,
+    fontSize: 14,
+    fontWeight: "800",
+  },
+  premiumPromptCloseBtn: {
+    paddingVertical: 8,
+    paddingHorizontal: 16,
   },
 });

@@ -278,7 +278,14 @@ import { useColors } from "@/utils/useColors";
     }, [contentWidth, isDesktop, shorts.length]);
 
     const shortHeight = Math.round(shortWidth * (16 / 9));
-    const longWidth = isDesktop ? Math.min(860, contentWidth - 48) : contentWidth - 40;
+
+    // Long videos: multi-column grid on web desktop
+    const longCols = isDesktop ? (width >= 1200 ? 3 : 2) : 1;
+    const longGap = 18;
+    const longWidth = isDesktop
+      ? Math.floor((contentWidth - 48 - longGap * (longCols - 1)) / longCols)
+      : contentWidth - 40;
+
     const isEmpty = !loading && shorts.length === 0 && longs.length === 0;
 
     return (
@@ -346,7 +353,10 @@ import { useColors } from "@/utils/useColors";
                     <Text style={[styles.sectionTitle, { color: colors.text }]}>Uzun videolar</Text>
                     <Text style={styles.sectionCount}>{longs.length} ta</Text>
                   </View>
-                  <View style={styles.longList}>
+                  <View style={[
+                    styles.longList,
+                    isDesktop && { flexDirection: "row", flexWrap: "wrap", gap: longGap, paddingHorizontal: 24, alignItems: "flex-start" },
+                  ]}>
                     {longs.map((item) => (
                       <LongCard key={item.id} item={item} width={longWidth} />
                     ))}
