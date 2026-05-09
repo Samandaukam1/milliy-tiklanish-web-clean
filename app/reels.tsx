@@ -383,10 +383,11 @@ function ReelSlide({
   const viewCount = formatCount(item.views_count ?? 0);
   const saveCount = formatCount(rawSaveCount);
   const canExpandDescription = item.description.trim().length > 90;
-  const preferredStageHeight = Math.min(height * 0.88, 820);
-  const maxStageWidth = Math.min(420, width * 0.9);
-  const stageWidth = Math.min(preferredStageHeight * (9 / 16), maxStageWidth);
-  const stageHeight = stageWidth * (16 / 9);
+  // Desktop: max 86% of viewport height, 9:16 aspect, cap width at 430px
+  const preferredStageHeight = Math.min(height * 0.86, 800);
+  const maxStageWidth = Math.min(430, width * 0.32);
+  const stageHeight = Math.min(preferredStageHeight, maxStageWidth * (16 / 9));
+  const stageWidth = stageHeight * (9 / 16);
   const overlayTranslateY = overlayOpacity.interpolate({
     inputRange: [0, 1],
     outputRange: [24, 0],
@@ -412,7 +413,8 @@ function ReelSlide({
 
   if (isDesktopWeb) {
     return (
-      <View style={[styles.slide, styles.desktopSlide, { width, height }]}> 
+      <View style={[styles.slide, styles.desktopSlide, { width, height }]}>
+        {/* Blurred ambient background */}
         <View style={styles.desktopBackdrop} pointerEvents="none">
           <Image
             source={{ uri: item.thumbnail_url || item.cover }}
@@ -437,9 +439,76 @@ function ReelSlide({
 
         <View style={styles.desktopShell}>
           <View style={styles.desktopViewerRow}>
-            <View style={[styles.desktopStageShell, { width: stageWidth, height: stageHeight }]}> 
+
+            {/* ── LEFT INFO COLUMN ─────────────────────────────────── */}
+            <Animated.View
+              style={[
+                styles.desktopInfoColumn,
+                { opacity: cleanMode ? 0 : overlayOpacity },
+              ]}
+              pointerEvents={cleanMode ? "none" : "box-none"}
+            >
+              {hasLinkedArticle && (
+                <Pressable
+                  onPress={() => void handleOpenArticle()}
+                  hitSlop={8}
+                  style={[styles.articleCardPressable, { maxWidth: 320 }]}
+                >
+                  <GlassSurface style={styles.articleCard} intensity={58}>
+                    {!!linkedArticleCover && (
+                      <Image
+                        source={{ uri: linkedArticleCover }}
+                        style={styles.articleCover}
+                        contentFit="cover"
+                      />
+                    )}
+                    <View style={styles.articleMeta}>
+                      <Text style={styles.articleLabel}>Biriktirilgan maqola</Text>
+                      <Text style={styles.articleTitle} numberOfLines={2}>
+                        {linkedArticleTitle}
+                      </Text>
+                    </View>
+                    <View style={styles.articleArrowWrap}>
+                      <ArrowUpRight size={15} color={Palette.red} strokeWidth={2.2} />
+                    </View>
+                  </GlassSurface>
+                </Pressable>
+              )}
+
+              {!!item.title && (
+                <Text style={styles.desktopInfoTitle} numberOfLines={4}>
+                  {item.title}
+                </Text>
+              )}
+
+              {!!item.description && (
+                <Pressable
+                  onPress={() => setIsDescriptionExpanded((c) => !c)}
+                  style={styles.descriptionPressable}
+                >
+                  <Text style={styles.reelDescription} numberOfLines={isDescriptionExpanded ? undefined : 3}>
+                    {item.description}
+                  </Text>
+                  {canExpandDescription && (
+                    <Text style={styles.descriptionToggle}>
+                      {isDescriptionExpanded ? "yopish" : "ko'proq"}
+                    </Text>
+                  )}
+                </Pressable>
+              )}
+
+              <View style={styles.metaRow}>
+                <GlassSurface style={styles.metaPill} intensity={44}>
+                  <Eye size={13} color={Palette.white} />
+                  <Text style={styles.metaText}>{`${viewCount} ko'rish`}</Text>
+                </GlassSurface>
+              </View>
+            </Animated.View>
+
+            {/* ── CENTER VIDEO CARD ──────────────────────────────── */}
+            <View style={[styles.desktopStageShell, { width: stageWidth, height: stageHeight }]}>
               <View style={styles.desktopStageGlow} pointerEvents="none" />
-              <View style={styles.desktopVideoFrame}> 
+              <View style={styles.desktopVideoFrame}>
                 {shouldLoad && item.video_url ? (
                   <UploadedVideoPlayer
                     ref={setVideoHandle}
@@ -461,16 +530,7 @@ function ReelSlide({
                   />
                 )}
 
-                {!cleanMode && !!item.title && (
-                  <Animated.View pointerEvents="none" style={[styles.chromeFadeLayer, { opacity: overlayOpacity }]}> 
-                    <LinearGradient
-                      colors={["transparent", "rgba(0,0,0,0.12)", "rgba(0,0,0,0.78)"]}
-                      locations={[0, 0.58, 1]}
-                      style={styles.desktopTitleGradient}
-                    />
-                  </Animated.View>
-                )}
-
+                {/* Tap to play/pause */}
                 <Pressable
                   onPress={handleStagePress}
                   onLongPress={handleHoldStart}
@@ -511,36 +571,19 @@ function ReelSlide({
                     )}
                   </Animated.View>
                 )}
-
-                {!cleanMode && !!item.title && (
-                  <Animated.View
-                    style={[
-                      styles.desktopMiniTitleWrap,
-                      {
-                        opacity: overlayOpacity,
-                        transform: [{ translateY: overlayTranslateY }],
-                      },
-                    ]}
-                    pointerEvents="none"
-                  >
-                    <Text style={styles.desktopMiniTitle} numberOfLines={1}>
-                      {item.title}
-                    </Text>
-                  </Animated.View>
-                )}
               </View>
             </View>
 
-            {!cleanMode && (
-              <Animated.View
-                style={[
-                  styles.desktopActionRail,
-                  {
-                    opacity: overlayOpacity,
-                    transform: [{ translateX: overlayTranslateX }],
-                  },
-                ]}
-              >
+            {/* ── RIGHT ACTION RAIL ────────────────────────────────── */}
+            <Animated.View
+              style={[
+                styles.desktopActionRail,
+                {
+                  opacity: overlayOpacity,
+                  transform: [{ translateX: overlayTranslateX }],
+                },
+              ]}
+            >
                 <ReelActionButton
                   icon={<Heart size={24} color={isLiked ? Palette.red : Palette.white} fill={isLiked ? Palette.red : "transparent"} />}
                   count={likeCount}
@@ -568,8 +611,14 @@ function ReelSlide({
                   disabled={!resolvedArticleId}
                   onPress={onSave}
                 />
-              </Animated.View>
-            )}
+                <ReelActionButton
+                  icon={cleanMode ? <Eye size={22} color={Palette.white} /> : <EyeOff size={22} color={Palette.white} />}
+                  label={cleanMode ? "Overlay" : "Clean"}
+                  variant="desktop"
+                  onPress={onToggleCleanMode}
+                />
+            </Animated.View>
+
           </View>
         </View>
       </View>
@@ -1106,6 +1155,19 @@ export default function ReelsScreen() {
     }
   }, [activeVideo, handleShare]);
 
+  // Pause the previously-active player when activeIndex changes
+  const prevActiveIndexRef = useRef(activeIndex);
+  useEffect(() => {
+    if (prevActiveIndexRef.current !== activeIndex) {
+      const player = activePlayerRef.current;
+      if (player) {
+        void player.pauseAsync().catch(() => {});
+      }
+      activePlayerRef.current = null;
+      prevActiveIndexRef.current = activeIndex;
+    }
+  }, [activeIndex]);
+
   const viewabilityConfig = useRef({ itemVisiblePercentThreshold: 80 }).current;
   const onViewableItemsChanged = useRef(({ viewableItems }: { viewableItems: ViewToken<AppMediaItem>[] }) => {
     const nextIndex = viewableItems[0]?.index;
@@ -1465,9 +1527,25 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    gap: 20,
+    gap: 32,
     width: "100%",
-    maxWidth: 1180,
+    maxWidth: 1200,
+  },
+  desktopInfoColumn: {
+    width: 300,
+    gap: 16,
+    justifyContent: "center",
+    alignSelf: "center",
+  },
+  desktopInfoTitle: {
+    color: Palette.white,
+    fontFamily: Fonts.serif,
+    fontSize: 22,
+    fontWeight: "800",
+    lineHeight: 29,
+    textShadowColor: "rgba(0,0,0,0.32)",
+    textShadowOffset: { width: 0, height: 2 },
+    textShadowRadius: 8,
   },
   desktopStageShell: {
     position: "relative",
