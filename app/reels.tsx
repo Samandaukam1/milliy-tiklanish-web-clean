@@ -254,6 +254,11 @@ function ReelSlide({
     setIsPaused((current) => {
       const nextPaused = !current;
       showFeedback(nextPaused ? "pause" : "play");
+      if (nextPaused) {
+        videoRef.current?.pauseAsync().catch(() => {});
+      } else {
+        videoRef.current?.playAsync().catch(() => {});
+      }
       return nextPaused;
     });
   }, [isActive, item.video_url, showFeedback]);
@@ -328,6 +333,7 @@ function ReelSlide({
     }
 
     onPlaybackHandleChange?.(null);
+    videoRef.current?.pauseAsync().catch(() => {});
     clearPendingTap();
     lastTapRef.current = 0;
     ignoreNextPressRef.current = false;
@@ -358,6 +364,23 @@ function ReelSlide({
   const embeddedArticle = item.articles ?? null;
   const resolvedArticleId = resolveReelArticleId(item as AppMediaItem & { article?: { id?: string | number | null } | null });
   const isDesktopWeb = Platform.OS === "web" && width >= WEB_DESKTOP_BREAKPOINT;
+
+  // Cinematic glow animation — desktop web only
+  const glowAnim = useRef(new Animated.Value(0)).current;
+  useEffect(() => {
+    if (!isDesktopWeb) return;
+    const loop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(glowAnim, { toValue: 1, duration: 3500, useNativeDriver: true }),
+        Animated.timing(glowAnim, { toValue: 0, duration: 3500, useNativeDriver: true }),
+      ])
+    );
+    loop.start();
+    return () => loop.stop();
+  }, [glowAnim, isDesktopWeb]);
+  const glowOpacity1 = glowAnim.interpolate({ inputRange: [0, 1], outputRange: [0.26, 0.46] });
+  const glowOpacity2 = glowAnim.interpolate({ inputRange: [0, 1], outputRange: [0.36, 0.14] });
+
   const linkedArticleTitle =
     embeddedArticle?.title_uz?.trim() ||
     item.linkedArticle?.title?.trim() ||
@@ -412,8 +435,8 @@ function ReelSlide({
 
   if (isDesktopWeb) {
     return (
-      <View style={[styles.slide, styles.desktopSlide, { width, height, backgroundColor: "#111" }]}>
-        {/* Blurred ambient background */}
+      <View style={[styles.slide, styles.desktopSlide, { width, height }]}>
+        {/* Cinematic blurred backdrop + animated ambient glow */}
         <View style={styles.desktopBackdrop} pointerEvents="none">
           <Image
             source={{ uri: item.thumbnail_url || item.cover }}
@@ -434,6 +457,32 @@ function ReelSlide({
             end={{ x: 1, y: 0.5 }}
             style={styles.desktopBackdropHorizontalVignette}
           />
+          {/* Red glow blob — top-left */}
+          <Animated.View
+            style={[
+              styles.glowBlobRed,
+              { opacity: glowOpacity1 },
+              Platform.select({ web: { filter: "blur(90px)" } as any }),
+            ]}
+          >
+            <LinearGradient
+              colors={["rgba(237,28,36,0.95)", "rgba(160,0,20,0.55)", "transparent"]}
+              style={StyleSheet.absoluteFillObject}
+            />
+          </Animated.View>
+          {/* Cyan glow blob — bottom-right */}
+          <Animated.View
+            style={[
+              styles.glowBlobCyan,
+              { opacity: glowOpacity2 },
+              Platform.select({ web: { filter: "blur(110px)" } as any }),
+            ]}
+          >
+            <LinearGradient
+              colors={["rgba(0,210,255,0.9)", "rgba(0,90,220,0.45)", "transparent"]}
+              style={StyleSheet.absoluteFillObject}
+            />
+          </Animated.View>
         </View>
 
         <View style={styles.desktopShell}>
@@ -506,11 +555,8 @@ function ReelSlide({
 
             {/* ── CENTER VIDEO CARD ──────────────────────────────── */}
             <View style={[styles.desktopStageShell, { width: stageWidth, height: stageHeight }]}>
-              <Text style={{ color: "#ff0", fontWeight: "800", fontSize: 13, textAlign: "center", marginBottom: 6, letterSpacing: 0.5 }}>
-                DESKTOP REELS DEBUG ACTIVE
-              </Text>
               <View style={styles.desktopStageGlow} pointerEvents="none" />
-              <View style={[styles.desktopVideoFrame, { borderWidth: 3, borderColor: "#ff0000" }]}>
+              <View style={[styles.desktopVideoFrame, { width: stageWidth, height: stageHeight }]}>
                 {shouldLoad && item.video_url ? (
                   <UploadedVideoPlayer
                     ref={setVideoHandle}
@@ -522,12 +568,12 @@ function ReelSlide({
                     playbackRate={isSpeedHolding ? 2 : 1}
                     resizeMode={ResizeMode.CONTAIN}
                     webUseContainedMedia
-                    style={styles.desktopVideoMedia}
+                    style={{ width: stageWidth, height: stageHeight }}
                   />
                 ) : (
                   <Image
                     source={{ uri: item.thumbnail_url || item.cover }}
-                    style={styles.desktopVideoMedia}
+                    style={{ width: stageWidth, height: stageHeight }}
                     contentFit="contain"
                   />
                 )}
@@ -1735,6 +1781,24 @@ const styles = StyleSheet.create({
   desktopCleanRestoreBtn: {
     alignItems: "center",
     justifyContent: "center",
+  },
+  glowBlobRed: {
+    position: "absolute",
+    width: 520,
+    height: 520,
+    top: -120,
+    left: -80,
+    borderRadius: 260,
+    overflow: "hidden",
+  },
+  glowBlobCyan: {
+    position: "absolute",
+    width: 480,
+    height: 480,
+    bottom: -100,
+    right: -60,
+    borderRadius: 240,
+    overflow: "hidden",
   },
   bottomOverlay: {
     position: "absolute",

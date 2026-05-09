@@ -27,6 +27,7 @@ type Props = {
 
 export type UploadedVideoPlayerHandle = {
   pauseAsync: () => Promise<void>;
+  playAsync: () => Promise<void>;
   unloadAsync: () => Promise<void>;
 };
 
@@ -52,6 +53,9 @@ export const UploadedVideoPlayer = forwardRef<UploadedVideoPlayerHandle, Props>(
   useImperativeHandle(ref, () => ({
     pauseAsync: async () => {
       await videoRef.current?.pauseAsync();
+    },
+    playAsync: async () => {
+      await videoRef.current?.playAsync();
     },
     unloadAsync: async () => {
       await videoRef.current?.unloadAsync();
