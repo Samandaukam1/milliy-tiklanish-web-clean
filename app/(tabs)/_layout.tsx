@@ -49,6 +49,15 @@ export default function TabLayout() {
                 borderTopWidth: 1,
                 height: Platform.OS === "ios" ? 88 : 64,
                 paddingTop: 8,
+                ...Platform.select({
+                  web: {
+                    position: "fixed" as any,
+                    bottom: 0,
+                    left: 0,
+                    right: 0,
+                    zIndex: 100,
+                  },
+                }),
               },
           tabBarLabelStyle: { fontSize: 11, fontWeight: "600", marginTop: 2 },
           tabBarBackground: isDesktop ? undefined : TabBarBackground,

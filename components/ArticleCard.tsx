@@ -56,6 +56,7 @@ function ArticleCardComponent({ article, variant = "large", rank, containerStyle
         style={[
           styles.hero,
           containerStyle,
+          Platform.OS === "web" && windowWidth < 1024 && { aspectRatio: 4 / 3 },
           Platform.OS === "web" && heroHovered && { transform: [{ scale: 1.015 }] },
         ]}
       >

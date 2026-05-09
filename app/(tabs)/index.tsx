@@ -114,6 +114,7 @@ export default function HomeScreen() {
   const { width } = useWindowDimensions();
   const isWeb = Platform.OS === "web";
   const isDesktop = isWeb && width >= 1024;
+  const isMobileWeb = isWeb && !isDesktop;
   const desktopCardWidth = width >= 1280 ? "31.8%" : "48.8%";
   const [refreshing, setRefreshing] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -329,7 +330,7 @@ export default function HomeScreen() {
             </Pressable>
           </View>
         </View>
-        <Image source={logo} style={styles.logoImage} contentFit="contain" />
+        {!isWeb && <Image source={logo} style={styles.logoImage} contentFit="contain" />}
       </View>
 
       {loading && (
@@ -360,12 +361,16 @@ export default function HomeScreen() {
             <View style={styles.section}>
               <SectionTitle kicker="Trend" title="Eng ko'p o'qilgan" action="Barchasi" />
               <FlatList
-                data={trending}
+                data={isMobileWeb ? [...trending].reverse() : trending}
                 keyExtractor={(i) => i.id}
                 horizontal
                 showsHorizontalScrollIndicator={false}
                 renderItem={({ item, index }) => (
-                  <ArticleCard article={item} variant="compact" rank={index + 1} />
+                  <ArticleCard
+                    article={item}
+                    variant="compact"
+                    rank={isMobileWeb ? trending.length - index : index + 1}
+                  />
                 )}
                 contentContainerStyle={{ paddingRight: 20 }}
               />
