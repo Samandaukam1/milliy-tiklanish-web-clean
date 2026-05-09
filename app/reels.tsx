@@ -203,6 +203,8 @@ function ReelSlide({
   onPlaybackHandleChange,
 }: ReelSlideProps) {
   const videoRef = useRef<UploadedVideoPlayerHandle | null>(null);
+  // Desktop web: native HTMLVideoElement ref — expo-av Video cannot be contained reliably on web
+  const htmlVideoRef = useRef<any>(null);
   const [isPaused, setIsPaused] = useState(false);
   const [isSpeedHolding, setIsSpeedHolding] = useState(false);
   const [isDescriptionExpanded, setIsDescriptionExpanded] = useState(false);
@@ -256,8 +258,10 @@ function ReelSlide({
       showFeedback(nextPaused ? "pause" : "play");
       if (nextPaused) {
         videoRef.current?.pauseAsync().catch(() => {});
+        if (htmlVideoRef.current) htmlVideoRef.current.pause();
       } else {
         videoRef.current?.playAsync().catch(() => {});
+        if (htmlVideoRef.current) htmlVideoRef.current.play()?.catch(() => {});
       }
       return nextPaused;
     });
@@ -333,6 +337,8 @@ function ReelSlide({
     }
 
     onPlaybackHandleChange?.(null);
+    // Immediately pause HTML video on desktop web when this slide is no longer active
+    if (htmlVideoRef.current) htmlVideoRef.current.pause();
     videoRef.current?.pauseAsync().catch(() => {});
     clearPendingTap();
     lastTapRef.current = 0;
@@ -361,6 +367,24 @@ function ReelSlide({
   });
 
   const shouldPlay = isActive && !isPaused;
+
+  // Drive HTML video play/pause from shouldPlay state
+  useEffect(() => {
+    const vid = htmlVideoRef.current;
+    if (!vid) return;
+    if (shouldPlay) {
+      const p = vid.play() as Promise<void> | undefined;
+      if (p) p.catch(() => {});
+    } else {
+      vid.pause();
+    }
+  }, [shouldPlay]);
+
+  // Sync muted state to HTML video element
+  useEffect(() => {
+    if (htmlVideoRef.current) htmlVideoRef.current.muted = muted;
+  }, [muted]);
+
   const embeddedArticle = item.articles ?? null;
   const resolvedArticleId = resolveReelArticleId(item as AppMediaItem & { article?: { id?: string | number | null } | null });
   const isDesktopWeb = Platform.OS === "web" && width >= WEB_DESKTOP_BREAKPOINT;
@@ -556,27 +580,32 @@ function ReelSlide({
             {/* ── CENTER VIDEO CARD ──────────────────────────────── */}
             <View style={[styles.desktopStageShell, { width: stageWidth, height: stageHeight }]}>
               <View style={styles.desktopStageGlow} pointerEvents="none" />
+              {/* desktopVideoFrame: explicit px dimensions prevent expo-av zoom bug */}
               <View style={[styles.desktopVideoFrame, { width: stageWidth, height: stageHeight }]}>
-                {shouldLoad && item.video_url ? (
-                  <UploadedVideoPlayer
-                    ref={setVideoHandle}
-                    uri={item.video_url}
-                    posterUri={item.thumbnail_url || item.cover}
-                    shouldPlay={shouldPlay}
-                    isLooping
-                    isMuted={muted}
-                    playbackRate={isSpeedHolding ? 2 : 1}
-                    resizeMode={ResizeMode.CONTAIN}
-                    webUseContainedMedia
-                    style={{ width: stageWidth, height: stageHeight }}
-                  />
-                ) : (
-                  <Image
-                    source={{ uri: item.thumbnail_url || item.cover }}
-                    style={{ width: stageWidth, height: stageHeight }}
-                    contentFit="contain"
-                  />
-                )}
+                {/* Use native <video> on desktop web — objectFit:contain is the only reliable fix */}
+                {shouldLoad && item.video_url
+                  ? React.createElement("video", {
+                      ref: htmlVideoRef,
+                      key: item.id,
+                      src: item.video_url,
+                      style: {
+                        width: "100%",
+                        height: "100%",
+                        objectFit: "contain",
+                        objectPosition: "center center",
+                        display: "block",
+                        backgroundColor: "#000",
+                        transform: "none",
+                      },
+                      playsInline: true,
+                      muted: true,
+                      loop: true,
+                    })
+                  : React.createElement(Image as any, {
+                      source: { uri: item.thumbnail_url || item.cover },
+                      style: { width: stageWidth, height: stageHeight },
+                      contentFit: "contain",
+                    })}
 
                 {/* Tap to play/pause */}
                 <Pressable
@@ -1326,6 +1355,12 @@ export default function ReelsScreen() {
         getItemLayout={(_, index) => ({ length: viewerHeight, offset: viewerHeight * index, index })}
         onViewableItemsChanged={onViewableItemsChanged}
         viewabilityConfig={viewabilityConfig}
+        onMomentumScrollEnd={(e) => {
+          // More reliable than viewability on desktop web
+          const offset = e.nativeEvent.contentOffset.y;
+          const nextIndex = Math.max(0, Math.min(Math.round(offset / viewerHeight), videos.length - 1));
+          setActiveIndex(nextIndex);
+        }}
         showsVerticalScrollIndicator={false}
         decelerationRate="fast"
         snapToAlignment="start"
