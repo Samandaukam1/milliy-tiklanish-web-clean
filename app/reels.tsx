@@ -412,7 +412,7 @@ function ReelSlide({
 
   if (isDesktopWeb) {
     return (
-      <View style={[styles.slide, styles.desktopSlide, { width, height }]}>
+      <View style={[styles.slide, styles.desktopSlide, { width, height, backgroundColor: "#111" }]}>
         {/* Blurred ambient background */}
         <View style={styles.desktopBackdrop} pointerEvents="none">
           <Image
@@ -506,8 +506,11 @@ function ReelSlide({
 
             {/* ── CENTER VIDEO CARD ──────────────────────────────── */}
             <View style={[styles.desktopStageShell, { width: stageWidth, height: stageHeight }]}>
+              <Text style={{ color: "#ff0", fontWeight: "800", fontSize: 13, textAlign: "center", marginBottom: 6, letterSpacing: 0.5 }}>
+                DESKTOP REELS DEBUG ACTIVE
+              </Text>
               <View style={styles.desktopStageGlow} pointerEvents="none" />
-              <View style={styles.desktopVideoFrame}>
+              <View style={[styles.desktopVideoFrame, { borderWidth: 3, borderColor: "#ff0000" }]}>
                 {shouldLoad && item.video_url ? (
                   <UploadedVideoPlayer
                     ref={setVideoHandle}
