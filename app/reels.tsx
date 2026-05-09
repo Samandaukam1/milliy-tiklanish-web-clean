@@ -383,11 +383,10 @@ function ReelSlide({
   const viewCount = formatCount(item.views_count ?? 0);
   const saveCount = formatCount(rawSaveCount);
   const canExpandDescription = item.description.trim().length > 90;
-  // Desktop: max 86% of viewport height, 9:16 aspect, cap width at 430px
-  const preferredStageHeight = Math.min(height * 0.86, 800);
-  const maxStageWidth = Math.min(430, width * 0.32);
-  const stageHeight = Math.min(preferredStageHeight, maxStageWidth * (16 / 9));
-  const stageWidth = stageHeight * (9 / 16);
+  // Desktop: max 86vh, true 9:16 aspect ratio
+  const preferredStageHeight = Math.min(height * 0.86, 820);
+  const stageWidth = Math.min(preferredStageHeight * (9 / 16), 420);
+  const stageHeight = stageWidth * (16 / 9);
   const overlayTranslateY = overlayOpacity.interpolate({
     inputRange: [0, 1],
     outputRange: [24, 0],
@@ -619,6 +618,17 @@ function ReelSlide({
                 />
             </Animated.View>
 
+            {/* Desktop clean-mode restore — visible when action rail is hidden */}
+            {cleanMode && (
+              <View style={styles.desktopCleanRestore}>
+                <Pressable onPress={onToggleCleanMode} hitSlop={10} style={styles.desktopCleanRestoreBtn}>
+                  <GlassSurface style={styles.cleanModeRestoreSurface} intensity={46}>
+                    <Eye size={20} color={Palette.white} />
+                  </GlassSurface>
+                </Pressable>
+              </View>
+            )}
+
           </View>
         </View>
       </View>
@@ -832,12 +842,9 @@ export default function ReelsScreen() {
   const viewerId = user?.id ?? deviceUserId;
   const authorName = user?.full_name || user?.name || user?.login || "Foydalanuvchi";
   const isDesktopWeb = Platform.OS === "web" && screenWidth >= WEB_DESKTOP_BREAKPOINT;
-  const phoneFrameHeight = Math.round(Math.min(844, screenHeight * 0.92));
-  const phoneFrameWidth = Math.round(
-    Math.min(390, phoneFrameHeight * (9 / 16), Math.max(280, screenWidth - 24))
-  );
-  const viewerWidth = isDesktopWeb ? phoneFrameWidth : screenWidth;
-  const viewerHeight = isDesktopWeb ? phoneFrameHeight : screenHeight;
+  // Mobile web: phone-frame sizing; desktop: full screen (3-column layout fills the viewport)
+  const viewerWidth = screenWidth;
+  const viewerHeight = screenHeight;
   const viewerTopInset = isDesktopWeb ? 0 : insets.top;
   const viewerBottomInset = isDesktopWeb ? 0 : insets.bottom;
 
@@ -1285,7 +1292,7 @@ export default function ReelsScreen() {
   );
 
   return (
-    <View style={[styles.root, isDesktopWeb && styles.webPhoneRoot]} nativeID={isDesktopWeb ? WEB_REELS_VIEWER_ID : undefined}>
+    <View style={styles.root} nativeID={isDesktopWeb ? WEB_REELS_VIEWER_ID : undefined}>
       <Stack.Screen
         options={{
           headerShown: false,
@@ -1294,13 +1301,7 @@ export default function ReelsScreen() {
       />
       <StatusBar style="light" translucent backgroundColor="transparent" />
 
-      {isDesktopWeb ? (
-        <View style={[styles.webPhoneFrame, { width: viewerWidth, height: viewerHeight }]}> 
-          {reelsViewerContent}
-        </View>
-      ) : (
-        reelsViewerContent
-      )}
+      {reelsViewerContent}
 
       <MediaCommentsSheet
         visible={Boolean(commentsTarget)}
@@ -1720,6 +1721,17 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignSelf: "center",
     minWidth: 74,
+  },
+  desktopCleanRestore: {
+    position: "absolute",
+    right: 28,
+    top: "50%",
+    zIndex: 20,
+    alignItems: "center",
+  },
+  desktopCleanRestoreBtn: {
+    alignItems: "center",
+    justifyContent: "center",
   },
   bottomOverlay: {
     position: "absolute",
