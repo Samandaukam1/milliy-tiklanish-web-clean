@@ -1,12 +1,12 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Stack, router, usePathname } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
-import React, { useEffect, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { StatusBar } from "expo-status-bar";
 import { SafeAreaProvider } from "react-native-safe-area-context";
-import { View, StyleSheet, Platform, Pressable, Text, Image, useWindowDimensions } from "react-native";
-import { Search, Bell, User, Send, Heart } from "lucide-react-native";
+import { View, StyleSheet, Platform, Pressable, Text, Image, useWindowDimensions, Animated, Modal } from "react-native";
+import { Search, Bell, User, Send, Heart, Menu, X } from "lucide-react-native";
 import logo from "../assets/images/milliy-tiklanish-logo.jpg";
 import { AppProvider } from "@/providers/AppProvider";
 import { PlayerProvider } from "@/providers/PlayerProvider";
@@ -55,6 +55,27 @@ export default function RootLayout() {
     const pathname = usePathname() ?? "/";
     const { width } = useWindowDimensions();
     const isDesktop = Platform.OS === "web" && width >= 1024;
+    const isMobileWeb = Platform.OS === "web" && width < 1024;
+    const [drawerOpen, setDrawerOpen] = useState(false);
+    const slideAnim = useRef(new Animated.Value(-300)).current;
+
+    const openDrawer = useCallback(() => {
+      setDrawerOpen(true);
+      Animated.timing(slideAnim, {
+        toValue: 0,
+        duration: 260,
+        useNativeDriver: true,
+      }).start();
+    }, [slideAnim]);
+
+    const closeDrawer = useCallback(() => {
+      Animated.timing(slideAnim, {
+        toValue: -300,
+        duration: 220,
+        useNativeDriver: true,
+      }).start(() => setDrawerOpen(false));
+    }, [slideAnim]);
+
     const navItems = [
       { id: "home", title: t("tabs.home"), route: "/", active: pathname === "/" || pathname === "/(tabs)" },
       { id: "articles", title: t("tabs.articles"), route: "/articles", active: pathname.startsWith("/articles") || pathname.startsWith("/(tabs)/articles") },
@@ -63,7 +84,101 @@ export default function RootLayout() {
       { id: "profile", title: t("tabs.profile"), route: "/profile", active: pathname.startsWith("/profile") },
     ];
 
-    if (!isDesktop) return null;
+    if (Platform.OS !== "web") return null;
+
+    // ── Mobile web: compact header + slide drawer ─────────────────────────
+    if (isMobileWeb) {
+      const drawerItems = [
+        { id: "home", label: t("tabs.home"), route: "/" },
+        { id: "articles", label: t("tabs.articles"), route: "/articles" },
+        { id: "media", label: t("tabs.media"), route: "/media" },
+        { id: "radio", label: t("tabs.radio"), route: "/radio" },
+        { id: "editorial", label: "Tahririyat", route: "/editorial" },
+        { id: "search", label: "Qidiruv", route: "/search" },
+        { id: "subscribe", label: "Premium obuna", route: "/subscribe" },
+        { id: "submit", label: "Maqola yuborish", route: "/submit-article" },
+        { id: "donat", label: "DONAT", route: "/donat" },
+      ];
+      return (
+        <>
+          <View style={[styles.header, { backgroundColor: colors.card, borderBottomColor: colors.border }]}>
+            <View style={styles.mobileHeaderInner}>
+              <Image source={logo} style={styles.mobileBrandLogo} resizeMode="contain" />
+              <Pressable onPress={openDrawer} style={styles.hamburgerBtn}>
+                <Menu size={24} color={colors.text} strokeWidth={2} />
+              </Pressable>
+            </View>
+          </View>
+
+          <Modal
+            visible={drawerOpen}
+            transparent
+            animationType="none"
+            onRequestClose={closeDrawer}
+          >
+            <View style={styles.drawerOverlay}>
+              <Animated.View
+                style={[
+                  styles.drawerPanel,
+                  { backgroundColor: colors.card },
+                  { transform: [{ translateX: slideAnim }] },
+                ]}
+              >
+                <View style={styles.drawerHeader}>
+                  <Image source={logo} style={styles.drawerLogo} resizeMode="contain" />
+                  <Pressable onPress={closeDrawer} style={styles.drawerCloseBtn}>
+                    <X size={22} color={colors.text} strokeWidth={2} />
+                  </Pressable>
+                </View>
+
+                <View style={styles.drawerNav}>
+                  {drawerItems.map((item) => {
+                    const isActive =
+                      item.route === "/"
+                        ? pathname === "/" || pathname === "/(tabs)"
+                        : pathname.startsWith(item.route);
+                    return (
+                      <Pressable
+                        key={item.id}
+                        onPress={() => {
+                          closeDrawer();
+                          setTimeout(() => router.push(item.route as any), 230);
+                        }}
+                        style={[styles.drawerNavItem, isActive && styles.drawerNavItemActive]}
+                      >
+                        <Text
+                          style={[
+                            styles.drawerNavText,
+                            { color: isActive ? Palette.red : colors.text },
+                            isActive && { fontWeight: "800" },
+                          ]}
+                        >
+                          {item.label}
+                        </Text>
+                      </Pressable>
+                    );
+                  })}
+                </View>
+
+                <View style={styles.drawerFooter}>
+                  <Pressable
+                    onPress={() => { closeDrawer(); setTimeout(() => router.push("/language"), 230); }}
+                    style={[styles.drawerLangBtn, { borderColor: colors.border, backgroundColor: colors.background }]}
+                  >
+                    <Text style={[styles.drawerLangText, { color: colors.text }]}>
+                      {t(`languageNames.${language}`)}
+                    </Text>
+                  </Pressable>
+                </View>
+              </Animated.View>
+
+              {/* Tap backdrop to close */}
+              <Pressable style={styles.drawerBackdrop} onPress={closeDrawer} />
+            </View>
+          </Modal>
+        </>
+      );
+    }
 
     return (
       <View style={[styles.header, { backgroundColor: colors.card, borderBottomColor: colors.border }]}>
@@ -382,5 +497,99 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: "800",
     letterSpacing: 0.8,
+  },
+
+  // ── Mobile web header ────────────────────────────────────────────────────
+  mobileHeaderInner: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+  },
+  mobileBrandLogo: {
+    width: 160,
+    height: 36,
+  },
+  hamburgerBtn: {
+    padding: 8,
+    borderRadius: 8,
+    ...Platform.select({ web: { cursor: "pointer" } as any }),
+  },
+
+  // ── Drawer ───────────────────────────────────────────────────────────────
+  drawerOverlay: {
+    flex: 1,
+    flexDirection: "row",
+  },
+  drawerPanel: {
+    width: 280,
+    height: "100%",
+    borderTopRightRadius: 20,
+    borderBottomRightRadius: 20,
+    shadowColor: "#000",
+    shadowOffset: { width: 4, height: 0 },
+    shadowOpacity: 0.18,
+    shadowRadius: 16,
+    overflow: "hidden",
+    ...Platform.select({ web: { boxShadow: "4px 0 24px rgba(0,0,0,0.18)" } as any }),
+  },
+  drawerHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: 20,
+    paddingVertical: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: "rgba(0,0,0,0.08)",
+  },
+  drawerLogo: {
+    width: 140,
+    height: 32,
+  },
+  drawerCloseBtn: {
+    padding: 6,
+    borderRadius: 8,
+    ...Platform.select({ web: { cursor: "pointer" } as any }),
+  },
+  drawerNav: {
+    flex: 1,
+    paddingTop: 8,
+    paddingHorizontal: 12,
+  },
+  drawerNavItem: {
+    paddingVertical: 13,
+    paddingHorizontal: 16,
+    borderRadius: 10,
+    marginBottom: 2,
+  },
+  drawerNavItemActive: {
+    backgroundColor: "rgba(237,28,36,0.07)",
+  },
+  drawerNavText: {
+    fontSize: 15,
+    fontFamily: Fonts.sans,
+    letterSpacing: 0.1,
+  },
+  drawerFooter: {
+    padding: 16,
+    borderTopWidth: 1,
+    borderTopColor: "rgba(0,0,0,0.08)",
+  },
+  drawerLangBtn: {
+    borderWidth: 1,
+    borderRadius: 10,
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    alignItems: "center",
+    ...Platform.select({ web: { cursor: "pointer" } as any }),
+  },
+  drawerLangText: {
+    fontSize: 14,
+    fontWeight: "600",
+  },
+  drawerBackdrop: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.46)",
   },
 });

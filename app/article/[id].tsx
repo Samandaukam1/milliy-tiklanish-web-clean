@@ -1443,7 +1443,7 @@ const styles = StyleSheet.create({
   },
   webShareBar: {
     width: 88,
-    paddingTop: 440,  // align with body content start (below hero height)
+    paddingTop: 472,  // align with body content start (hero height + pageContentDesktop paddingTop)
     alignItems: "center",
     gap: 10,
     ...Platform.select({
@@ -1503,9 +1503,12 @@ const styles = StyleSheet.create({
   // ── Scroll containers ──────────────────────────────────────────────────────
   scrollContainer: {},
   scrollContainerDesktop: {},
-  mobileScrollView: { flex: 1 },
+  mobileScrollView: {
+    flex: 1,
+    ...Platform.select({ web: { paddingTop: 0 } }),
+  },
   pageContent: { width: "100%" },
-  pageContentDesktop: { width: "100%", maxWidth: 1160, alignSelf: "center" },
+  pageContentDesktop: { width: "100%", maxWidth: 1160, alignSelf: "center", paddingTop: 32 },
   topBar: {
     position: "absolute",
     left: 20,
@@ -1530,7 +1533,7 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
   },
-  heroWrapDesktop: { height: 480, borderRadius: 16, maxWidth: 1160, alignSelf: "center", overflow: "hidden", marginBottom: 24 },
+  heroWrapDesktop: { height: 480, borderRadius: 16, maxWidth: 1160, alignSelf: "center", overflow: "hidden", marginBottom: 24, width: "100%" },
   heroImage: { ...StyleSheet.absoluteFillObject, width: "100%", height: "100%" },
   heroGrad: { ...StyleSheet.absoluteFillObject, backgroundColor: "rgba(0,0,0,0.22)" },
   // ── Body ───────────────────────────────────────────────────────────────────

@@ -3,7 +3,7 @@ import { LinearGradient } from "expo-linear-gradient";
 import { router } from "expo-router";
 import { Bookmark, Clock, Crown } from "lucide-react-native";
 import React, { memo, useCallback, useMemo, useState } from "react";
-import { Pressable, StyleProp, StyleSheet, Text, View, ViewStyle, Platform } from "react-native";
+import { Pressable, StyleProp, StyleSheet, Text, View, ViewStyle, Platform, useWindowDimensions } from "react-native";
 import * as Haptics from "expo-haptics";
 import { Palette } from "@/constants/colors";
 import { Fonts } from "@/constants/fonts";
@@ -29,6 +29,7 @@ function ArticleCardComponent({ article, variant = "large", rank, containerStyle
   const { isSaved, toggleSaved, markRead } = useApp();
   const { t } = useLanguage();
   const colors = useColors();
+  const { width: windowWidth } = useWindowDimensions();
   const styles = useMemo(() => createStyles(colors), [colors]);
   const saved = isSaved(article.id);
   const [heroHovered, setHeroHovered] = useState(false);
@@ -76,7 +77,13 @@ function ArticleCardComponent({ article, variant = "large", rank, containerStyle
               </View>
             )}
           </View>
-          <Text style={styles.heroTitle} numberOfLines={3}>
+          <Text
+            style={[
+              styles.heroTitle,
+              Platform.OS === "web" && windowWidth < 1024 && { fontSize: 20, lineHeight: 27 },
+            ]}
+            numberOfLines={3}
+          >
             {article.title}
           </Text>
           <View style={styles.heroMeta}>
@@ -258,7 +265,7 @@ function createStyles(colors: ReturnType<typeof import("@/utils/useColors").useC
       },
       default: { height: 440 },
     }),
-    borderRadius: 20,
+    borderRadius: 24,
     overflow: "hidden",
     backgroundColor: Palette.black,
   },

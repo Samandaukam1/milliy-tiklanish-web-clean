@@ -33,6 +33,25 @@ function HeroGlow({ children }: { children: React.ReactNode }) {
   const anim = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
+    // Inject CSS keyframes for web glow (once)
+    if (Platform.OS === "web" && typeof document !== "undefined") {
+      if (!document.getElementById("mt-hero-glow-kf")) {
+        const s = document.createElement("style");
+        s.id = "mt-hero-glow-kf";
+        s.textContent = [
+          "@keyframes mtHeroGlow {",
+          "  0%   { box-shadow: 0 0 28px 6px rgba(237,28,36,0.52), 0 0 0 0 rgba(0,176,255,0.0); border-color: rgba(237,28,36,0.55); }",
+          "  33%  { box-shadow: 0 0 38px 9px rgba(237,28,36,0.28), 0 0 26px 5px rgba(0,176,255,0.32); border-color: rgba(0,140,220,0.45); }",
+          "  66%  { box-shadow: 0 0 42px 11px rgba(0,176,255,0.40), 0 0 18px 4px rgba(237,28,36,0.18); border-color: rgba(0,176,255,0.55); }",
+          "  100% { box-shadow: 0 0 28px 6px rgba(237,28,36,0.52), 0 0 0 0 rgba(0,176,255,0.0); border-color: rgba(237,28,36,0.55); }",
+          "}",
+        ].join("\n");
+        document.head.appendChild(s);
+      }
+      return;
+    }
+
+    // Native: animated shadow
     Animated.loop(
       Animated.sequence([
         Animated.timing(anim, { toValue: 1, duration: 1800, useNativeDriver: false }),
@@ -57,7 +76,16 @@ function HeroGlow({ children }: { children: React.ReactNode }) {
   });
 
   if (Platform.OS === "web") {
-    return <>{children}</>;
+    return (
+      <View
+        style={[
+          styles.heroGlowWebWrap,
+          Platform.select({ web: { animation: "mtHeroGlow 2.8s ease-in-out infinite" } as any }),
+        ]}
+      >
+        {children}
+      </View>
+    );
   }
 
   return (
@@ -65,7 +93,7 @@ function HeroGlow({ children }: { children: React.ReactNode }) {
       style={{
         marginHorizontal: 20,
         marginTop: 10,
-        borderRadius: 18,
+        borderRadius: 24,
         shadowColor,
         shadowOffset: { width: 0, height: 0 },
         shadowOpacity,
@@ -168,7 +196,14 @@ export default function HomeScreen() {
             {/* ── Left column ────────────────────────────────────────────── */}
             <View style={styles.desktopLeft}>
               {featured ? (
-                <ArticleCard article={featured} variant="hero" />
+                <View
+                  style={[
+                    styles.desktopHeroGlowWrap,
+                    Platform.select({ web: { animation: "mtHeroGlow 2.8s ease-in-out infinite" } as any }),
+                  ]}
+                >
+                  <ArticleCard article={featured} variant="hero" />
+                </View>
               ) : (
                 <View style={[styles.desktopEmptyHero, { backgroundColor: colors.card }]}>
                   <Text style={{ color: Palette.textSecondary }}>Hozircha maqolalar mavjud emas</Text>
@@ -440,6 +475,20 @@ const styles = StyleSheet.create({
     marginLeft: 0,
     alignSelf: "flex-start",
     backgroundColor: "transparent",
+  },
+  heroGlowWebWrap: {
+    marginHorizontal: 20,
+    marginTop: 10,
+    borderRadius: 24,
+    borderWidth: 1.5,
+    borderColor: "rgba(237,28,36,0.55)",
+    overflow: "hidden",
+  },
+  desktopHeroGlowWrap: {
+    borderRadius: 24,
+    borderWidth: 1.5,
+    borderColor: "rgba(237,28,36,0.55)",
+    overflow: "hidden",
   },
   section: { paddingHorizontal: 20, marginTop: 10 },
   catChip: {
