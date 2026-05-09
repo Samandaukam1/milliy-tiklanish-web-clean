@@ -39,6 +39,12 @@ function ArticleCardComponent({ article, variant = "large", rank, containerStyle
     router.push(`/article/${article.id}`);
   }, [article.id, markRead]);
 
+  const prefetchOnHover = useCallback(() => {
+    if (Platform.OS === "web" && article.cover) {
+      Image.prefetch(article.cover).catch(() => {});
+    }
+  }, [article.cover]);
+
   const onBookmark = useCallback(() => {
     if (Platform.OS !== "web") {
       Haptics.selectionAsync().catch(() => {});
@@ -51,7 +57,7 @@ function ArticleCardComponent({ article, variant = "large", rank, containerStyle
       <Pressable
         onPress={open}
         testID={`hero-${article.id}`}
-        onHoverIn={() => Platform.OS === "web" && setHeroHovered(true)}
+        onHoverIn={() => { if (Platform.OS === "web") { setHeroHovered(true); prefetchOnHover(); } }}
         onHoverOut={() => setHeroHovered(false)}
         style={[
           styles.hero,
@@ -100,7 +106,7 @@ function ArticleCardComponent({ article, variant = "large", rank, containerStyle
 
   if (variant === "compact") {
     return (
-      <Pressable onPress={open} style={[styles.compact, containerStyle]} testID={`compact-${article.id}`}>
+      <Pressable onPress={open} onHoverIn={prefetchOnHover} style={[styles.compact, containerStyle]} testID={`compact-${article.id}`}>
         {rank !== undefined && <Text style={styles.rank}>{String(rank).padStart(2, "0")}</Text>}
         <Image source={{ uri: article.cover }} style={styles.compactImage} contentFit="cover" />
         <View style={styles.compactBody}>
@@ -152,6 +158,7 @@ function ArticleCardComponent({ article, variant = "large", rank, containerStyle
     return (
       <Pressable
         onPress={open}
+        onHoverIn={prefetchOnHover}
         style={({ hovered }: any) => [
           styles.list,
           hovered && styles.listHovered,
@@ -179,6 +186,7 @@ function ArticleCardComponent({ article, variant = "large", rank, containerStyle
     return (
       <Pressable
         onPress={open}
+        onHoverIn={prefetchOnHover}
         style={({ hovered }: any) => [
           styles.news,
           hovered && styles.newsHovered,
@@ -217,6 +225,7 @@ function ArticleCardComponent({ article, variant = "large", rank, containerStyle
   return (
     <Pressable
       onPress={open}
+      onHoverIn={prefetchOnHover}
       style={({ hovered }: any) => [
         styles.large,
         hovered && styles.largeHovered,

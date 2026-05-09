@@ -588,6 +588,7 @@ function ReelSlide({
                       ref: htmlVideoRef,
                       key: item.id,
                       src: item.video_url,
+                      poster: item.thumbnail_url || item.cover || undefined,
                       style: {
                         width: "100%",
                         height: "100%",

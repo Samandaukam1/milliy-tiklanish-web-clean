@@ -5,7 +5,7 @@ import { StatusBar } from "expo-status-bar";
 import * as Haptics from "expo-haptics";
 import * as WebBrowser from "expo-web-browser";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { ArrowLeft, Bookmark, Clock, Crown, Headphones, Heart, MessageCircle, Share2, ZoomIn, ZoomOut } from "lucide-react-native";
+import { ArrowLeft, Bookmark, Clock, Crown, Eye, Headphones, Heart, MessageCircle, Share2, ZoomIn, ZoomOut } from "lucide-react-native";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
@@ -39,6 +39,13 @@ import { useColors } from "@/utils/useColors";
 import type { AppArticle, AppBlock, DbArticle } from "@/lib/types";
 
 const brandLogo = require("../../assets/images/milliy-tiklanish-logo.jpg");
+
+function formatViewCount(real: number): string {
+  const v = Math.round(real * 4.73);
+  if (v >= 10000) return `${Math.round(v / 1000)}K ko'rish`;
+  if (v >= 1000) return `${(v / 1000).toFixed(1)}K ko'rish`;
+  return `${v} ko'rish`;
+}
 
 const FONT_SIZE_KEY = "article_font_size";
 const FONT_SIZE_MIN = 14;
@@ -493,7 +500,7 @@ export default function ArticleDetail() {
             )}
           </View>
 
-          <Text style={[styles.title, { color: colors.text }]}>{article.title}</Text>
+          <Text style={[styles.title, { color: colors.text }, Platform.OS === "web" && !isDesktop && { fontSize: 22, lineHeight: 30 }]}>{article.title}</Text>
           {!!article.excerpt && (
             <Text style={[styles.excerpt, { color: colors.textSecondary }]}>{article.excerpt}</Text>
           )}
@@ -503,9 +510,17 @@ export default function ArticleDetail() {
               <Text style={[styles.authorName, { color: colors.text }]}>{article.authorName}</Text>
               <Text style={styles.authorRole}>{relativeUz(article.publishedAt)}</Text>
             </View>
-            <View style={styles.readTime}>
-              <Clock size={12} color={Palette.beige} />
-              <Text style={styles.readTimeText}>{article.readMinutes} {t("article.readTime")}</Text>
+            <View style={{ gap: 4, alignItems: "flex-end" }}>
+              {(article.viewCount ?? 0) > 0 && (
+                <View style={styles.readTime}>
+                  <Eye size={12} color={Palette.beige} />
+                  <Text style={styles.readTimeText}>{formatViewCount(article.viewCount ?? 0)}</Text>
+                </View>
+              )}
+              <View style={styles.readTime}>
+                <Clock size={12} color={Palette.beige} />
+                <Text style={styles.readTimeText}>{article.readMinutes} {t("article.readTime")}</Text>
+              </View>
             </View>
           </View>
 
@@ -674,6 +689,7 @@ export default function ArticleDetail() {
             userId={userId}
             authorName={userDisplayName}
             commentsCount={commentsCount}
+            isLoggedIn={!!user}
           />
         </View>
       </View>

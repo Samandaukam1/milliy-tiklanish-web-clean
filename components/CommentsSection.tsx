@@ -10,7 +10,8 @@ import {
   TextInput,
   View,
 } from "react-native";
-import { MessageCircle, Send, CornerDownRight } from "lucide-react-native";
+import { router } from "expo-router";
+import { MessageCircle, Send, CornerDownRight, LogIn } from "lucide-react-native";
 import { Palette } from "@/constants/colors";
 import { Fonts } from "@/constants/fonts";
 import { fetchComments, addComment } from "@/lib/services";
@@ -25,9 +26,10 @@ interface Props {
   userId: string;
   authorName: string;
   commentsCount: number;
+  isLoggedIn?: boolean;
 }
 
-export function CommentsSection({ articleId, userId, authorName, commentsCount: initialCount }: Props) {
+export function CommentsSection({ articleId, userId, authorName, commentsCount: initialCount, isLoggedIn = false }: Props) {
   const colors = useColors();
   const [comments, setComments] = useState<AppComment[]>([]);
   const [loading, setLoading] = useState(true);
@@ -100,61 +102,74 @@ export function CommentsSection({ articleId, userId, authorName, commentsCount: 
         </Text>
       </View>
 
-      {/* Input */}
-      <View
-        style={[
-          styles.inputCard,
-          { backgroundColor: colors.card, borderColor: colors.border },
-        ]}
-      >
-        {replyTo && (
-          <View style={styles.replyBanner}>
-            <CornerDownRight size={13} color={Palette.red} />
-            <Text style={styles.replyBannerText} numberOfLines={1}>
-              {replyTo.author}ga javob
-            </Text>
-            <Pressable onPress={() => setReplyTo(null)} style={styles.replyCancel}>
-              <Text style={styles.replyCancelText}>✕</Text>
+      {/* Input or login prompt */}
+      {isLoggedIn ? (
+        <View
+          style={[
+            styles.inputCard,
+            { backgroundColor: colors.card, borderColor: colors.border },
+          ]}
+        >
+          {replyTo && (
+            <View style={styles.replyBanner}>
+              <CornerDownRight size={13} color={Palette.red} />
+              <Text style={styles.replyBannerText} numberOfLines={1}>
+                {replyTo.author}ga javob
+              </Text>
+              <Pressable onPress={() => setReplyTo(null)} style={styles.replyCancel}>
+                <Text style={styles.replyCancelText}>✕</Text>
+              </Pressable>
+            </View>
+          )}
+          <View style={styles.inputRow}>
+            <View style={[styles.avatarSmall, { backgroundColor: Palette.red }]}>
+              <Text style={styles.avatarSmallText}>
+                {authorName.charAt(0).toUpperCase()}
+              </Text>
+            </View>
+            <TextInput
+              ref={inputRef}
+              style={[
+                styles.input,
+                { color: colors.text },
+                Platform.select({ web: { outlineStyle: "none" } as any }),
+              ]}
+              placeholder="Izoh yozing..."
+              placeholderTextColor={colors.textSecondary}
+              value={text}
+              onChangeText={setText}
+              multiline
+              maxLength={1000}
+              returnKeyType="default"
+            />
+            <Pressable
+              onPress={handleSend}
+              disabled={!text.trim() || submitting}
+              style={({ pressed }) => [
+                styles.sendBtn,
+                (!text.trim() || pressed) && styles.sendBtnDisabled,
+              ]}
+            >
+              {submitting ? (
+                <ActivityIndicator size="small" color={Palette.white} />
+              ) : (
+                <Send size={16} color={Palette.white} />
+              )}
             </Pressable>
           </View>
-        )}
-        <View style={styles.inputRow}>
-          <View style={[styles.avatarSmall, { backgroundColor: Palette.red }]}>
-            <Text style={styles.avatarSmallText}>
-              {authorName.charAt(0).toUpperCase()}
-            </Text>
-          </View>
-          <TextInput
-            ref={inputRef}
-            style={[
-              styles.input,
-              { color: colors.text },
-              Platform.select({ web: { outlineStyle: "none" } as any }),
-            ]}
-            placeholder="Izoh yozing..."
-            placeholderTextColor={colors.textSecondary}
-            value={text}
-            onChangeText={setText}
-            multiline
-            maxLength={1000}
-            returnKeyType="default"
-          />
-          <Pressable
-            onPress={handleSend}
-            disabled={!text.trim() || submitting}
-            style={({ pressed }) => [
-              styles.sendBtn,
-              (!text.trim() || pressed) && styles.sendBtnDisabled,
-            ]}
-          >
-            {submitting ? (
-              <ActivityIndicator size="small" color={Palette.white} />
-            ) : (
-              <Send size={16} color={Palette.white} />
-            )}
-          </Pressable>
         </View>
-      </View>
+      ) : (
+        <Pressable
+          style={[styles.loginPrompt, { backgroundColor: colors.surface, borderColor: colors.border }]}
+          onPress={() => router.push("/login" as any)}
+        >
+          <LogIn size={18} color={Palette.red} />
+          <Text style={[styles.loginPromptText, { color: colors.text }]}>
+            Izoh yozish uchun roʻxatdan oʻting
+          </Text>
+          <Text style={[styles.loginArrow, { color: Palette.red }]}>→</Text>
+        </Pressable>
+      )}
 
       {/* Comments list */}
       {loading ? (
@@ -310,6 +325,28 @@ const styles = StyleSheet.create({
     fontFamily: Fonts.serif,
     fontWeight: "700",
     color: Palette.black,
+  },
+  // ── Login prompt ──────────────────────────────────────────────────────────
+  loginPrompt: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    borderRadius: 16,
+    borderWidth: 1,
+    padding: 16,
+    marginBottom: 20,
+    ...Platform.select({
+      web: { cursor: "pointer", boxShadow: "0 2px 10px rgba(0,0,0,0.06)" } as any,
+    }),
+  },
+  loginPromptText: {
+    flex: 1,
+    fontSize: 14,
+    fontWeight: "600",
+  },
+  loginArrow: {
+    fontSize: 18,
+    fontWeight: "700",
   },
   // ── Input card ─────────────────────────────────────────────────────────────
   inputCard: {
