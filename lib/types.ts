@@ -291,3 +291,25 @@ export type AppComment = {
   createdAt: string;
   replies: AppComment[];
 };
+
+// ─── Social Settings ──────────────────────────────────────────────────────────
+
+export type SocialSettings = {
+  id: number;
+  title_uz: string | null;
+  title_uz_cy: string | null;
+  title_ru: string | null;
+  title_en: string | null;
+  telegram_enabled: boolean;
+  telegram_url: string | null;
+  instagram_enabled: boolean;
+  instagram_url: string | null;
+  youtube_enabled: boolean;
+  youtube_url: string | null;
+  facebook_enabled: boolean;
+  facebook_url: string | null;
+  tiktok_enabled: boolean;
+  tiktok_url: string | null;
+  twitter_enabled: boolean;
+  twitter_url: string | null;
+};

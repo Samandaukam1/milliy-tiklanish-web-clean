@@ -15,6 +15,7 @@ import type {
   AppMediaComment,
   AppMediaItem,
   AppComment,
+  SocialSettings,
 } from "./types";
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -1524,4 +1525,45 @@ export async function getPersonalizedArticles(
 
   if (!data) return [];
   return (data as DbArticle[]).map((r) => normalizeArticle(r, lang, cats));
+}
+
+// ─── Social Settings ──────────────────────────────────────────────────────────
+
+const SOCIAL_SETTINGS_TTL_MS = 5 * 60 * 1000;
+
+let socialSettingsCache: { data: SocialSettings; fetchedAt: number } | null = null;
+let socialSettingsInFlight: Promise<SocialSettings | null> | null = null;
+
+export async function fetchSocialSettings(): Promise<SocialSettings | null> {
+  const now = Date.now();
+
+  if (socialSettingsCache && now - socialSettingsCache.fetchedAt < SOCIAL_SETTINGS_TTL_MS) {
+    return socialSettingsCache.data;
+  }
+
+  if (socialSettingsInFlight) {
+    return socialSettingsInFlight;
+  }
+
+  socialSettingsInFlight = (async (): Promise<SocialSettings | null> => {
+    try {
+      const { data, error } = await supabase
+        .from("social_settings")
+        .select("*")
+        .limit(1)
+        .maybeSingle();
+
+      if (error || !data) return null;
+
+      const settings = data as SocialSettings;
+      socialSettingsCache = { data: settings, fetchedAt: Date.now() };
+      return settings;
+    } catch {
+      return null;
+    } finally {
+      socialSettingsInFlight = null;
+    }
+  })();
+
+  return socialSettingsInFlight;
 }
