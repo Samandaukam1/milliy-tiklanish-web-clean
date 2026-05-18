@@ -3,6 +3,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { clearSupabaseAuth } from "@/lib/googleAuth";
+import { supabase, loadSupabaseProfile } from "@/lib/supabase";
 import type { SubscriptionInfo, SubscriptionPlan, UserProfile } from "@/lib/types";
 
 const SAVED_KEY = "mt.saved.v1";
@@ -95,6 +96,36 @@ export const [AppProvider, useApp] = createContextHook(() => {
       setSubscription(storageQuery.data.user?.subscription_info?.plan ?? storageQuery.data.subscription);
     }
   }, [storageQuery.data]);
+
+  // ─── Supabase session listener ────────────────────────────────────────────
+  // On web, Supabase persists the session in localStorage. When the user
+  // reloads the page (or arrives after a Google OAuth redirect), Supabase
+  // fires INITIAL_SESSION / SIGNED_IN so we can restore the profile WITHOUT
+  // hitting any /api/... endpoint (which doesn't exist in static export).
+  useEffect(() => {
+    const {
+      data: { subscription: authSub },
+    } = supabase.auth.onAuthStateChange(async (event, session) => {
+      if (
+        (event === "INITIAL_SESSION" || event === "SIGNED_IN") &&
+        session?.user
+      ) {
+        const profile = await loadSupabaseProfile(session.user.id);
+        if (profile) {
+          login(profile);
+        }
+      } else if (event === "SIGNED_OUT") {
+        setUser(null);
+        setSubscription("free");
+        persistUser.mutate(null);
+        persistSub.mutate("free");
+      }
+    });
+
+    return () => authSub.unsubscribe();
+    // login, persistUser and persistSub are stable references
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Persistent device user ID — used for payment tracking
   useEffect(() => {

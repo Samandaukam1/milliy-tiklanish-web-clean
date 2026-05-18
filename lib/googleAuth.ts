@@ -1,8 +1,7 @@
 import * as Linking from "expo-linking";
 import * as WebBrowser from "expo-web-browser";
 import { Platform } from "react-native";
-import { fetchAuthJson } from "@/lib/authApi";
-import { supabase } from "@/lib/supabase";
+import { supabase, loadSupabaseProfile, upsertSupabaseProfile } from "@/lib/supabase";
 import type { UserProfile } from "@/lib/types";
 
 WebBrowser.maybeCompleteAuthSession();
@@ -108,21 +107,42 @@ export async function completeGoogleSignIn(code: string): Promise<UserProfile> {
     throw new Error("Google sessiyasi topilmadi");
   }
 
-  const { response: res, body } = await fetchAuthJson<{ profile?: UserProfile; error?: string }>(
-    "/api/auth/google/profile",
-    {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${accessToken}`,
-      },
-    }
-  );
-
-  if (!res.ok || !body.profile) {
-    throw new Error(body.error || "Profilni yangilashda xatolik yuz berdi");
+  const authUser = data.session?.user;
+  if (!authUser) {
+    throw new Error("Google sessiyasi foydalanuvchisi topilmadi");
   }
 
-  return body.profile;
+  // Build the profile patch from OAuth user metadata, then upsert directly
+  // via Supabase client — no server API call needed.
+  const displayName: string | null =
+    authUser.user_metadata?.full_name ??
+    authUser.user_metadata?.name ??
+    (typeof authUser.email === "string" ? authUser.email.split("@")[0] : null) ??
+    null;
+
+  const avatarUrl: string | null =
+    authUser.user_metadata?.avatar_url ??
+    authUser.user_metadata?.picture ??
+    null;
+
+  const patch: Record<string, unknown> = {
+    phone: authUser.phone || authUser.email || `google:${authUser.id}`,
+    phone_verified: Boolean(authUser.phone),
+    name: displayName,
+    email: authUser.email ?? null,
+    avatar_url: avatarUrl,
+    provider: "google",
+  };
+
+  const profile = await upsertSupabaseProfile(authUser.id, patch);
+  if (!profile) {
+    // Upsert failed — still try a plain read as graceful fallback
+    const existing = await loadSupabaseProfile(authUser.id);
+    if (existing) return existing;
+    throw new Error("Profilni yangilashda xatolik yuz berdi");
+  }
+
+  return profile;
 }
 
 export async function clearSupabaseAuth(): Promise<void> {
