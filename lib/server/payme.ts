@@ -82,8 +82,24 @@ const DEFAULT_PACKAGE_CODE = "123456";
 const DEFAULT_VAT_PERCENT = 12;
 
 const PAYME_MERCHANT_ID = process.env.PAYME_MERCHANT_ID?.trim() ?? "";
-const PAYME_MERCHANT_LOGIN = process.env.PAYME_MERCHANT_LOGIN?.trim() ?? "";
-const PAYME_MERCHANT_KEY = process.env.PAYME_MERCHANT_KEY?.trim() ?? "";
+
+// Accept PAYME_KEY (production) or PAYME_TEST_KEY (sandbox/test).
+// Fall back to legacy PAYME_MERCHANT_KEY for backwards compatibility.
+const _paymeProductionKey = process.env.PAYME_KEY?.trim() ?? "";
+const _paymeTestKey = process.env.PAYME_TEST_KEY?.trim() ?? "";
+const _paymeLegacyKey = process.env.PAYME_MERCHANT_KEY?.trim() ?? "";
+
+// The active secret used to validate incoming Basic-Auth from Payme.
+// Prefer the explicit production key, then test key, then legacy.
+const PAYME_MERCHANT_KEY = _paymeProductionKey || _paymeTestKey || _paymeLegacyKey;
+
+// Payme Basic-Auth login is always "Paycom" (per Payme docs).
+// Fall back to the merchant ID, then the legacy PAYME_MERCHANT_LOGIN env var.
+const PAYME_MERCHANT_LOGIN =
+  "Paycom" ||
+  PAYME_MERCHANT_ID ||
+  (process.env.PAYME_MERCHANT_LOGIN?.trim() ?? "");
+
 const PAYME_RECEIPT_CODE = process.env.PAYME_MXIK_CODE?.trim() || DEFAULT_RECEIPT_CODE;
 const PAYME_RECEIPT_PACKAGE_CODE = process.env.PAYME_PACKAGE_CODE?.trim() || DEFAULT_PACKAGE_CODE;
 const PAYME_RECEIPT_VAT_PERCENT = normalizePositiveInteger(process.env.PAYME_VAT_PERCENT, DEFAULT_VAT_PERCENT);
@@ -195,7 +211,8 @@ export function isPaymeCheckoutConfigured(): boolean {
 }
 
 export function isPaymeMerchantConfigured(): boolean {
-  return Boolean(PAYME_MERCHANT_LOGIN && PAYME_MERCHANT_KEY && isSupabasePaymentServerConfigured());
+  // Need at least one key (production or test) and the Supabase admin connection.
+  return Boolean(PAYME_MERCHANT_KEY && isSupabasePaymentServerConfigured());
 }
 
 export function createPaymentsAdminClient(): SupabaseClient {
