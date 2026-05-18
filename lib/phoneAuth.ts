@@ -1,12 +1,6 @@
 import { fetchAuthJson } from "@/lib/authApi";
-import { supabase, loadSupabaseProfile } from "@/lib/supabase";
+import { supabase, loadSupabaseProfile, lookupEmailByLogin } from "@/lib/supabase";
 import type { UserProfile } from "@/lib/types";
-
-// Synthetic Supabase Auth email for login-based accounts (must match lib/auth.ts).
-const VIRTUAL_EMAIL_DOMAIN = "users.milliy.app";
-function makeVirtualEmail(login: string): string {
-  return `${login.toLowerCase().trim()}@${VIRTUAL_EMAIL_DOMAIN}`;
-}
 
 // Helper: returns true when the error comes from a missing server API endpoint.
 function isApiUnavailable(error: unknown): boolean {
@@ -197,7 +191,12 @@ export async function registerPhoneAccount(input: RegisterPhoneInput): Promise<U
 
 export async function loginWithPassword(login: string, password: string): Promise<UserProfile> {
   console.log("[auth] using Supabase direct auth");
-  const email = makeVirtualEmail(login);
+
+  // Resolve the stored email from the username in profiles table.
+  const email = await lookupEmailByLogin(login);
+  if (!email) {
+    throw new Error("Tizimga kirish amalga oshmadi");
+  }
 
   const { data, error } = await supabase.auth.signInWithPassword({ email, password });
   if (error || !data.session?.user) {

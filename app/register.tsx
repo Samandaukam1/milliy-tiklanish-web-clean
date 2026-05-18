@@ -31,6 +31,7 @@ type FormErrors = {
   lastName?: string;
   birthDate?: string;
   login?: string;
+  email?: string;
   password?: string;
   interests?: string;
   general?: string;
@@ -73,6 +74,7 @@ export default function RegisterScreen() {
   const [lastName, setLastName] = useState("");
   const [birthDate, setBirthDate] = useState("");
   const [loginValue, setLoginValue] = useState("");
+  const [emailValue, setEmailValue] = useState("");
   const [password, setPassword] = useState("");
   const [selectedInterests, setSelectedInterests] = useState<string[]>([]);
   const [categories, setCategories] = useState<AppCategory[]>([]);
@@ -156,6 +158,7 @@ export default function RegisterScreen() {
     const trimmedFirstName = firstName.trim();
     const trimmedLastName = lastName.trim();
     const normalizedLogin = normalizeLoginValue(loginValue);
+    const trimmedEmail = emailValue.trim().toLowerCase();
     const passwordError = validatePassword(password);
 
     if (!avatarUrl) {
@@ -172,6 +175,9 @@ export default function RegisterScreen() {
     }
     if (!normalizedLogin || normalizedLogin.length < 3) {
       nextErrors.login = "Login kamida 3 ta belgidan iborat bo'lishi kerak";
+    }
+    if (!trimmedEmail || !trimmedEmail.includes("@") || !trimmedEmail.includes(".")) {
+      nextErrors.email = "Email manzil noto'g'ri. Iltimos haqiqiy email kiriting.";
     }
     if (passwordError) {
       nextErrors.password = passwordError;
@@ -196,6 +202,7 @@ export default function RegisterScreen() {
         last_name: trimmedLastName,
         birth_date: birthDate,
         login: normalizedLogin,
+        email: emailValue.trim().toLowerCase(),
         password,
         interests: selectedInterests,
         avatar_url: avatarUrl,
@@ -206,7 +213,11 @@ export default function RegisterScreen() {
       router.replace("/phone-verification?source=register");
     } catch (submitError) {
       const message = submitError instanceof Error ? submitError.message : "Ro'yxatdan o'tish yakunlanmadi";
-      if (message === "Bu login band yoki avval ishlatilgan") {
+      if (message === "Bu email yoki login band yoki avval ishlatilgan") {
+        setErrors({ login: message });
+      } else if (message === "Email manzil noto'g'ri. Iltimos haqiqiy email kiriting.") {
+        setErrors({ email: message });
+      } else if (message === "Bu login band yoki avval ishlatilgan") {
         setErrors({ login: message });
       } else if (message === "Kamida 3 ta qiziqish tanlang") {
         setErrors({ interests: message });
@@ -216,7 +227,7 @@ export default function RegisterScreen() {
     } finally {
       setSubmitting(false);
     }
-  }, [avatarUrl, birthDate, firstName, lastName, login, loginValue, password, selectedInterests, stagePhoneLinkPassword]);
+  }, [avatarUrl, birthDate, emailValue, firstName, lastName, login, loginValue, password, selectedInterests, stagePhoneLinkPassword]);
 
   return (
     <View style={[styles.page, { backgroundColor: colors.background }]}> 
@@ -321,6 +332,25 @@ export default function RegisterScreen() {
                   style={[styles.input, { color: colors.text, backgroundColor: colors.background, borderColor: colors.border }]}
                 />
                 {errors.login ? <Text style={styles.errorText}>{errors.login}</Text> : null}
+              </View>
+
+              <View style={styles.fieldGroup}>
+                <Text style={[styles.label, { color: colors.text }]}>Email</Text>
+                <TextInput
+                  value={emailValue}
+                  onChangeText={(value) => {
+                    setEmailValue(value.trim());
+                    setErrors((prev) => ({ ...prev, email: undefined, general: undefined }));
+                  }}
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  keyboardType="email-address"
+                  placeholder="email@example.com"
+                  placeholderTextColor={colors.textSecondary}
+                  style={[styles.input, { color: colors.text, backgroundColor: colors.background, borderColor: colors.border }]}
+                />
+                <Text style={[styles.passwordHint, { color: colors.textSecondary }]}>Akkauntingizni tiklash va bildirishnomalar uchun ishlatiladi.</Text>
+                {errors.email ? <Text style={styles.errorText}>{errors.email}</Text> : null}
               </View>
 
               <View style={styles.fieldGroup}>

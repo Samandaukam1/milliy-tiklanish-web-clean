@@ -1,5 +1,5 @@
 import { sendTelegramVerificationCode, verifyTelegramCode, type TelegramPhoneSession } from "@/lib/telegramAuth";
-import { supabase, loadSupabaseProfile, upsertSupabaseProfile } from "@/lib/supabase";
+import { supabase, loadSupabaseProfile, upsertSupabaseProfile, lookupEmailByLogin } from "@/lib/supabase";
 import type { UserProfile } from "@/lib/types";
 
 export type RegisterUserInput = {
@@ -7,6 +7,8 @@ export type RegisterUserInput = {
   last_name: string;
   birth_date: string;
   login: string;
+  /** Real email address — used for Supabase Auth signUp. */
+  email: string;
   password: string;
   interests: string[];
   avatar_url?: string | null;
@@ -18,12 +20,9 @@ type PhoneLinkInput = {
   currentPassword: string;
 };
 
-// Synthetic email domain for Supabase Auth — purely internal,
-// email confirmation must be disabled in the Supabase project.
-const VIRTUAL_EMAIL_DOMAIN = "users.milliy.app";
-
-function makeVirtualEmail(login: string): string {
-  return `${login.toLowerCase().trim()}@${VIRTUAL_EMAIL_DOMAIN}`;
+function normalizeErrorMessage(value: string | undefined, fallback: string): string {
+  const trimmed = value?.trim();
+  return trimmed || fallback;
 }
 
 export function normalizeLoginValue(value: string): string {
@@ -82,7 +81,11 @@ export async function registerUser(input: RegisterUserInput): Promise<UserProfil
     throw new Error("Login va parolni kiriting");
   }
 
-  const email = makeVirtualEmail(input.login);
+  const email = input.email.trim().toLowerCase();
+  if (!email || !email.includes("@")) {
+    throw new Error("Email manzil noto'g'ri. Iltimos haqiqiy email kiriting.");
+  }
+
   const fullName = `${input.first_name.trim()} ${input.last_name.trim()}`.trim();
 
   const { data, error } = await supabase.auth.signUp({
@@ -101,7 +104,10 @@ export async function registerUser(input: RegisterUserInput): Promise<UserProfil
   if (error) {
     const msg = error.message ?? "";
     if (/already registered|already been registered|User already registered/i.test(msg)) {
-      throw new Error("Bu login band yoki avval ishlatilgan");
+      throw new Error("Bu email yoki login band yoki avval ishlatilgan");
+    }
+    if (/invalid email|email.*invalid/i.test(msg)) {
+      throw new Error("Email manzil noto'g'ri. Iltimos haqiqiy email kiriting.");
     }
     throw new Error(msg || "Ro'yxatdan o'tish yakunlanmadi");
   }
@@ -122,6 +128,7 @@ export async function registerUser(input: RegisterUserInput): Promise<UserProfil
     name: fullName,
     birth_date: input.birth_date,
     login: input.login,
+    email,
     avatar_url: input.avatar_url ?? null,
     provider: "credentials",
     subscription: "free",
@@ -147,7 +154,13 @@ export async function registerUser(input: RegisterUserInput): Promise<UserProfil
 
 export async function loginUser(login: string, password: string): Promise<UserProfile> {
   console.log("[auth] using Supabase direct auth");
-  const email = makeVirtualEmail(login);
+
+  // Resolve the real Supabase Auth email from the username stored in profiles.
+  const email = await lookupEmailByLogin(login);
+  if (!email) {
+    // No profile found for this login — surface generic message to avoid enumeration.
+    throw new Error("Login yoki parol noto'g'ri");
+  }
 
   const { data, error } = await supabase.auth.signInWithPassword({ email, password });
   if (error || !data.session?.user) {

@@ -65,6 +65,21 @@ function normalizeProfileRow(row: Record<string, unknown>): UserProfile {
 const PROFILE_SELECT =
   "id, phone, phone_verified, telegram_verified, telegram_verified_at, telegram_gateway_verified_at, telegram_id, telegram_username, full_name, first_name, last_name, birth_date, login, name, email, avatar_url, provider, subscription, subscription_starts_at, subscription_expires_at, created_at, updated_at";
 
+// Look up the real email stored in public.profiles for a given username.
+// Used by all login flows to map login → Supabase Auth email.
+// Requires RLS to allow anon SELECT on profiles.email / profiles.login.
+export async function lookupEmailByLogin(login: string): Promise<string | null> {
+  try {
+    const { data } = await (supabase.from("profiles") as any)
+      .select("email")
+      .eq("login", login.toLowerCase().trim())
+      .maybeSingle();
+    return typeof data?.email === "string" && data.email.includes("@") ? data.email : null;
+  } catch {
+    return null;
+  }
+}
+
 export async function loadSupabaseProfile(userId: string): Promise<UserProfile | null> {
   try {
     const { data, error } = await (supabase.from("profiles") as any)
