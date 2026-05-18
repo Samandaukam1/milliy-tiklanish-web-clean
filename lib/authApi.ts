@@ -67,7 +67,27 @@ function isHtmlResponse(contentType: string | null, text: string): boolean {
   const normalizedText = text.trimStart().toLowerCase();
   const normalizedType = (contentType ?? "").toLowerCase();
 
-  return normalizedType.includes("text/html") || normalizedText.startsWith("<!doctype html") || normalizedText.startsWith("<html");
+  return (
+    normalizedType.includes("text/html") ||
+    normalizedText.startsWith("<!doctype") ||
+    normalizedText.startsWith("<html") ||
+    normalizedText.startsWith("<?xml")
+  );
+}
+
+function buildApiErrorMessage(status: number, text: string): string {
+  if (status === 404) {
+    return "API endpoint topilmadi. Server konfiguratsiyasini tekshiring.";
+  }
+  if (status === 503 || status === 502) {
+    return "Server vaqtincha mavjud emas. Keyinroq urinib ko'ring.";
+  }
+  if (status >= 500) {
+    return "Server xatoligi yuz berdi. Keyinroq urinib ko'ring.";
+  }
+  // Generic fallback for unexpected non-JSON
+  const snippet = text.slice(0, 120).replace(/\s+/g, " ").trim();
+  return `Server noto'g'ri javob qaytardi${snippet ? ": " + snippet : ""}`;
 }
 
 export function getSharedApiBase(): string {
@@ -109,14 +129,23 @@ export async function fetchAuthJson<T>(
           continue;
         }
 
-        throw new Error("Server returned non-JSON: " + text.slice(0, 100));
+        const msg = buildApiErrorMessage(response.status, text);
+        console.error("[auth-api] Non-JSON response", { status: response.status, url, snippet: text.slice(0, 120) });
+        throw new Error(msg);
+      }
+
+      // Status codes that don't carry a JSON body (edge/CDN errors)
+      if (!text.trim() && response.status >= 400) {
+        const msg = buildApiErrorMessage(response.status, "");
+        throw new Error(msg);
       }
 
       try {
         const body = JSON.parse(text) as T;
         return { response, body, text, url };
       } catch {
-        throw new Error("Server returned non-JSON: " + text.slice(0, 100));
+        const msg = buildApiErrorMessage(response.status, text);
+        throw new Error(msg);
       }
     } catch (error) {
       lastError = error instanceof Error ? error : new Error("Auth request failed");
