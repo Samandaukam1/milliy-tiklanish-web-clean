@@ -1,5 +1,24 @@
 import { fetchAuthJson } from "@/lib/authApi";
+import { supabase, loadSupabaseProfile } from "@/lib/supabase";
 import type { UserProfile } from "@/lib/types";
+
+// Synthetic Supabase Auth email for login-based accounts (must match lib/auth.ts).
+const VIRTUAL_EMAIL_DOMAIN = "users.milliy.app";
+function makeVirtualEmail(login: string): string {
+  return `${login.toLowerCase().trim()}@${VIRTUAL_EMAIL_DOMAIN}`;
+}
+
+// Returns true when the error comes from a missing server API endpoint.
+function isApiUnavailable(error: unknown): boolean {
+  const msg = error instanceof Error ? error.message : String(error);
+  return (
+    msg.includes("vaqtincha mavjud emas") ||
+    msg.includes("API endpoint") ||
+    msg.includes("Server konfiguratsiya") ||
+    msg.includes("server konfiguratsiya") ||
+    msg.includes("server xatoligi")
+  );
+}
 
 export type TelegramVerificationPurpose = "signup" | "register" | "recovery" | "change_phone";
 
@@ -80,18 +99,27 @@ type RegisterInput = {
 };
 
 export async function sendTelegramVerificationCode(phone: string, options?: SendCodeOptions): Promise<TelegramSendResult> {
-  const { response: res, body } = await fetchAuthJson<TelegramSendResponse>("/api/auth/telegram-gateway/send", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      phone,
-      purpose: options?.purpose,
-      user_id: options?.user_id,
-      current_password: options?.current_password,
-    }),
-  });
+  let res: Response;
+  let body: TelegramSendResponse;
+  try {
+    const result = await fetchAuthJson<TelegramSendResponse>("/api/auth/telegram-gateway/send", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        phone,
+        purpose: options?.purpose,
+        user_id: options?.user_id,
+        current_password: options?.current_password,
+      }),
+    });
+    res = result.response;
+    body = result.body;
+  } catch (error) {
+    if (isApiUnavailable(error)) {
+      throw new Error("Telegram orqali tasdiqlash hozircha veb-sayt orqali mavjud emas. Iltimos, ilovamizdan foydalaning.");
+    }
+    throw error;
+  }
 
   if (!res.ok) {
     throw new Error(body.error || "Telegram kodi yuborilmadi");
@@ -126,17 +154,22 @@ export async function sendTelegramVerificationCode(phone: string, options?: Send
 
 export async function verifyTelegramCode(sessionId: string, code: string, phone?: string): Promise<TelegramVerifyResult> {
   console.log("[telegram-auth] VERIFY REQUEST:", { session_id: sessionId, phone, code });
-  const { response: res, body } = await fetchAuthJson<TelegramVerifyResponse>("/api/auth/telegram-gateway/verify", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      session_id: sessionId,
-      code,
-      phone,
-    }),
-  });
+  let res: Response;
+  let body: TelegramVerifyResponse;
+  try {
+    const result = await fetchAuthJson<TelegramVerifyResponse>("/api/auth/telegram-gateway/verify", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ session_id: sessionId, code, phone }),
+    });
+    res = result.response;
+    body = result.body;
+  } catch (error) {
+    if (isApiUnavailable(error)) {
+      throw new Error("Telegram orqali tasdiqlash hozircha veb-sayt orqali mavjud emas. Iltimos, ilovamizdan foydalaning.");
+    }
+    throw error;
+  }
 
   if (!res.ok || !body.phone_verified || !body.session_id || !body.phone) {
     throw new Error(body.error || "Tasdiqlash kodi tekshirilmadi");
@@ -172,20 +205,57 @@ async function requestUser(path: string, payload: object, fallbackMessage: strin
 }
 
 export async function registerTelegramAccount(input: RegisterInput): Promise<UserProfile> {
-  return requestUser("/api/auth/register-complete", input, "Ro'yxatdan o'tish yakunlanmadi");
+  try {
+    return await requestUser("/api/auth/register-complete", input, "Ro'yxatdan o'tish yakunlanmadi");
+  } catch (error) {
+    if (isApiUnavailable(error)) {
+      throw new Error("Telefon orqali ro'yxatdan o'tish hozircha veb-sayt orqali mavjud emas. Iltimos, ilovamizdan foydalaning.");
+    }
+    throw error;
+  }
 }
 
 export async function loginWithTelegramPassword(login: string, password: string): Promise<UserProfile> {
-  return requestUser("/api/auth/login", { login, password }, "Kirish amalga oshmadi");
+  console.log("[auth] using Supabase direct auth");
+  const email = makeVirtualEmail(login);
+
+  const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+  if (error || !data.session?.user) {
+    const msg = error?.message ?? "";
+    throw new Error(
+      /invalid login credentials|invalid password|email not confirmed/i.test(msg)
+        ? "Kirish amalga oshmadi"
+        : msg || "Kirish amalga oshmadi"
+    );
+  }
+
+  const profile = await loadSupabaseProfile(data.session.user.id);
+  if (!profile) throw new Error("Profil topilmadi");
+
+  console.log("[profile] loaded from Supabase");
+  return profile;
 }
 
 export async function resetTelegramPassword(sessionId: string, password: string): Promise<UserProfile> {
-  return requestUser(
-    "/api/auth/password/reset",
-    {
-      session_id: sessionId,
-      password,
-    },
-    "Parol tiklanmadi"
-  );
+  try {
+    return await requestUser(
+      "/api/auth/password/reset",
+      { session_id: sessionId, password },
+      "Parol tiklanmadi"
+    );
+  } catch (error) {
+    if (isApiUnavailable(error)) {
+      // Fallback: update via Supabase auth if a session is active
+      const { error: updateError } = await supabase.auth.updateUser({ password });
+      if (!updateError) {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (user) {
+          const profile = await loadSupabaseProfile(user.id);
+          if (profile) return profile;
+        }
+      }
+      throw new Error("Parol yangilash hozircha veb-sayt orqali mavjud emas. Iltimos, ilovamizdan foydalaning.");
+    }
+    throw error;
+  }
 }

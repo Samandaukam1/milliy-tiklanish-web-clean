@@ -1,5 +1,24 @@
 import { fetchAuthJson } from "@/lib/authApi";
+import { supabase, loadSupabaseProfile } from "@/lib/supabase";
 import type { UserProfile } from "@/lib/types";
+
+// Synthetic Supabase Auth email for login-based accounts (must match lib/auth.ts).
+const VIRTUAL_EMAIL_DOMAIN = "users.milliy.app";
+function makeVirtualEmail(login: string): string {
+  return `${login.toLowerCase().trim()}@${VIRTUAL_EMAIL_DOMAIN}`;
+}
+
+// Helper: returns true when the error comes from a missing server API endpoint.
+function isApiUnavailable(error: unknown): boolean {
+  const msg = error instanceof Error ? error.message : String(error);
+  return (
+    msg.includes("vaqtincha mavjud emas") ||
+    msg.includes("API endpoint") ||
+    msg.includes("Server konfiguratsiya") ||
+    msg.includes("server konfiguratsiya") ||
+    msg.includes("server xatoligi")
+  );
+}
 
 export type PhoneVerificationPurpose = "signup" | "recovery";
 
@@ -73,16 +92,22 @@ type RegisterPhoneInput = {
 };
 
 export async function sendPhoneVerificationCode(input: SendPhoneCodeInput): Promise<PhoneVerificationSession | ReviewBypassSession> {
-  const { response: res, body } = await fetchAuthJson<PhoneSendResponse>(
-    "/api/auth/phone/send",
-    {
+  let res: Response;
+  let body: PhoneSendResponse;
+  try {
+    const result = await fetchAuthJson<PhoneSendResponse>("/api/auth/phone/send", {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify(input),
+    });
+    res = result.response;
+    body = result.body;
+  } catch (error) {
+    if (isApiUnavailable(error)) {
+      throw new Error("SMS tasdiqlash hozircha veb-sayt orqali mavjud emas. Iltimos, ilovamizdan foydalaning.");
     }
-  );
+    throw error;
+  }
 
   if (!res.ok || !body.session_id || !body.phone) {
     throw new Error(body.error || "SMS kod yuborilmadi");
@@ -110,16 +135,22 @@ export async function sendPhoneVerificationCode(input: SendPhoneCodeInput): Prom
 }
 
 export async function verifyPhoneCode(sessionId: string, code: string): Promise<PhoneVerifyResult> {
-  const { response: res, body } = await fetchAuthJson<PhoneVerifyResponse>(
-    "/api/auth/phone/verify",
-    {
+  let res: Response;
+  let body: PhoneVerifyResponse;
+  try {
+    const result = await fetchAuthJson<PhoneVerifyResponse>("/api/auth/phone/verify", {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ session_id: sessionId, code }),
+    });
+    res = result.response;
+    body = result.body;
+  } catch (error) {
+    if (isApiUnavailable(error)) {
+      throw new Error("SMS tasdiqlash hozircha veb-sayt orqali mavjud emas. Iltimos, ilovamizdan foydalaning.");
     }
-  );
+    throw error;
+  }
 
   if (!res.ok || !body.phone_verified || !body.session_id || !body.phone) {
     throw new Error(body.error || "Tasdiqlash kodi tekshirilmadi");
@@ -154,20 +185,57 @@ async function requestUser(path: string, payload: object, fallbackMessage: strin
 }
 
 export async function registerPhoneAccount(input: RegisterPhoneInput): Promise<UserProfile> {
-  return requestUser("/api/auth/phone/register", input, "Ro'yxatdan o'tish yakunlanmadi");
+  try {
+    return await requestUser("/api/auth/phone/register", input, "Ro'yxatdan o'tish yakunlanmadi");
+  } catch (error) {
+    if (isApiUnavailable(error)) {
+      throw new Error("Telefon orqali ro'yxatdan o'tish hozircha veb-sayt orqali mavjud emas. Iltimos, ilovamizdan foydalaning.");
+    }
+    throw error;
+  }
 }
 
 export async function loginWithPassword(login: string, password: string): Promise<UserProfile> {
-  return requestUser("/api/auth/login", { login, password }, "Tizimga kirish amalga oshmadi");
+  console.log("[auth] using Supabase direct auth");
+  const email = makeVirtualEmail(login);
+
+  const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+  if (error || !data.session?.user) {
+    const msg = error?.message ?? "";
+    throw new Error(
+      /invalid login credentials|invalid password|email not confirmed/i.test(msg)
+        ? "Tizimga kirish amalga oshmadi"
+        : msg || "Tizimga kirish amalga oshmadi"
+    );
+  }
+
+  const profile = await loadSupabaseProfile(data.session.user.id);
+  if (!profile) throw new Error("Profil topilmadi");
+
+  console.log("[profile] loaded from Supabase");
+  return profile;
 }
 
 export async function resetPhonePassword(sessionId: string, password: string): Promise<UserProfile> {
-  return requestUser(
-    "/api/auth/phone/password/reset",
-    {
-      session_id: sessionId,
-      password,
-    },
-    "Parol yangilanmadi"
-  );
+  try {
+    return await requestUser(
+      "/api/auth/phone/password/reset",
+      { session_id: sessionId, password },
+      "Parol yangilanmadi"
+    );
+  } catch (error) {
+    if (isApiUnavailable(error)) {
+      // Fallback: if there's an active Supabase session, update password there
+      const { error: updateError } = await supabase.auth.updateUser({ password });
+      if (!updateError) {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (user) {
+          const profile = await loadSupabaseProfile(user.id);
+          if (profile) return profile;
+        }
+      }
+      throw new Error("Parol yangilash hozircha veb-sayt orqali mavjud emas. Iltimos, ilovamizdan foydalaning.");
+    }
+    throw error;
+  }
 }

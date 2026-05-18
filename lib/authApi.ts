@@ -77,7 +77,7 @@ function isHtmlResponse(contentType: string | null, text: string): boolean {
 
 function buildApiErrorMessage(status: number, text: string): string {
   if (status === 404) {
-    return "API endpoint topilmadi. Server konfiguratsiyasini tekshiring.";
+    return "Ushbu xizmat vaqtincha mavjud emas.";
   }
   if (status === 503 || status === 502) {
     return "Server vaqtincha mavjud emas. Keyinroq urinib ko'ring.";

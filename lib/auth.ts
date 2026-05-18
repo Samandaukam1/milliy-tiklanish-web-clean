@@ -1,13 +1,6 @@
-import { fetchAuthJson } from "@/lib/authApi";
 import { sendTelegramVerificationCode, verifyTelegramCode, type TelegramPhoneSession } from "@/lib/telegramAuth";
+import { supabase, loadSupabaseProfile, upsertSupabaseProfile } from "@/lib/supabase";
 import type { UserProfile } from "@/lib/types";
-
-type AuthUserResponse = {
-  success?: boolean;
-  user?: UserProfile;
-  error?: string;
-  code?: string;
-};
 
 export type RegisterUserInput = {
   first_name: string;
@@ -25,9 +18,12 @@ type PhoneLinkInput = {
   currentPassword: string;
 };
 
-function normalizeErrorMessage(value: string | undefined, fallback: string): string {
-  const trimmed = value?.trim();
-  return trimmed || fallback;
+// Synthetic email domain for Supabase Auth — purely internal,
+// email confirmation must be disabled in the Supabase project.
+const VIRTUAL_EMAIL_DOMAIN = "users.milliy.app";
+
+function makeVirtualEmail(login: string): string {
+  return `${login.toLowerCase().trim()}@${VIRTUAL_EMAIL_DOMAIN}`;
 }
 
 export function normalizeLoginValue(value: string): string {
@@ -63,28 +59,113 @@ export function validatePassword(value: string): string | null {
   return null;
 }
 
-async function requestUser(path: string, payload: object, fallbackMessage: string): Promise<UserProfile> {
-  const { response, body } = await fetchAuthJson<AuthUserResponse>(path, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify(payload),
-  });
+async function saveUserInterests(userId: string, interests: string[]): Promise<void> {
+  if (interests.length === 0) return;
 
-  if (!response.ok || !body.user) {
-    throw new Error(normalizeErrorMessage(body.error, fallbackMessage));
-  }
+  await (supabase.from("user_interests") as any).delete().eq("user_id", userId);
 
-  return body.user;
+  const tryInsert = async (column: string): Promise<boolean> => {
+    const rows = interests.map((id) => ({ user_id: userId, [column]: id, score: 10 }));
+    const { error } = await (supabase.from("user_interests") as any).insert(rows);
+    return !error;
+  };
+
+  (await tryInsert("interest_id")) ||
+    (await tryInsert("category_id")) ||
+    (await tryInsert("category"));
 }
 
 export async function registerUser(input: RegisterUserInput): Promise<UserProfile> {
-  return requestUser("/api/auth/register", input, "Ro'yxatdan o'tish yakunlanmadi");
+  console.log("[auth] using Supabase direct auth");
+
+  if (!input.login || !input.password) {
+    throw new Error("Login va parolni kiriting");
+  }
+
+  const email = makeVirtualEmail(input.login);
+  const fullName = `${input.first_name.trim()} ${input.last_name.trim()}`.trim();
+
+  const { data, error } = await supabase.auth.signUp({
+    email,
+    password: input.password,
+    options: {
+      data: {
+        login: input.login,
+        full_name: fullName,
+        first_name: input.first_name.trim(),
+        last_name: input.last_name.trim(),
+      },
+    },
+  });
+
+  if (error) {
+    const msg = error.message ?? "";
+    if (/already registered|already been registered|User already registered/i.test(msg)) {
+      throw new Error("Bu login band yoki avval ishlatilgan");
+    }
+    throw new Error(msg || "Ro'yxatdan o'tish yakunlanmadi");
+  }
+
+  // If email confirmation is required, data.session is null but data.user is set
+  const authUser = data.user ?? data.session?.user;
+  if (!authUser) {
+    throw new Error("Ro'yxatdan o'tish yakunlandi. Profilingizga kirish uchun emailni tasdiqlang.");
+  }
+
+  const now = new Date().toISOString();
+  const patch: Record<string, unknown> = {
+    phone: null,
+    phone_verified: false,
+    first_name: input.first_name.trim(),
+    last_name: input.last_name.trim(),
+    full_name: fullName,
+    name: fullName,
+    birth_date: input.birth_date,
+    login: input.login,
+    avatar_url: input.avatar_url ?? null,
+    provider: "credentials",
+    subscription: "free",
+    updated_at: now,
+  };
+
+  let profile = await upsertSupabaseProfile(authUser.id, patch);
+  if (!profile) {
+    profile = await loadSupabaseProfile(authUser.id);
+  }
+  if (!profile) {
+    throw new Error("Profil yaratib bo'lmadi");
+  }
+
+  // Best-effort: save interests without blocking registration
+  await saveUserInterests(authUser.id, input.interests).catch((err) => {
+    console.warn("[auth] Could not save interests:", err);
+  });
+
+  console.log("[profile] loaded from Supabase");
+  return profile;
 }
 
 export async function loginUser(login: string, password: string): Promise<UserProfile> {
-  return requestUser("/api/auth/login", { login, password }, "Login yoki parol noto'g'ri");
+  console.log("[auth] using Supabase direct auth");
+  const email = makeVirtualEmail(login);
+
+  const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+  if (error || !data.session?.user) {
+    const msg = error?.message ?? "";
+    throw new Error(
+      /invalid login credentials|invalid password|email not confirmed/i.test(msg)
+        ? "Login yoki parol noto'g'ri"
+        : msg || "Login yoki parol noto'g'ri"
+    );
+  }
+
+  const profile = await loadSupabaseProfile(data.session.user.id);
+  if (!profile) {
+    throw new Error("Profil topilmadi");
+  }
+
+  console.log("[profile] loaded from Supabase");
+  return profile;
 }
 
 export async function sendPhoneLinkCode(input: PhoneLinkInput): Promise<TelegramPhoneSession> {
