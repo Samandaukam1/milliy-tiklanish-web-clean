@@ -6,7 +6,43 @@ import {
   isSupabasePaymentServerConfigured,
   resolvePaymentPricing,
   type PaymentType,
-} from "@/lib/server/payme";
+} from "../../lib/server/payme";
+
+type ServerlessRequest = {
+  method?: string;
+  body?: unknown;
+  [Symbol.asyncIterator]?: () => AsyncIterator<Buffer | string>;
+};
+
+type ServerlessResponse = {
+  setHeader(name: string, value: string): void;
+  status(code: number): ServerlessResponse;
+  json(body: unknown): void;
+};
+
+function sendJson(res: ServerlessResponse, statusCode: number, body: unknown): void {
+  res.setHeader("Content-Type", "application/json; charset=utf-8");
+  res.status(statusCode).json(body);
+}
+
+async function readJsonBody(req: ServerlessRequest): Promise<unknown> {
+  if (req.body && typeof req.body === "object") {
+    return req.body;
+  }
+
+  if (typeof req.body === "string") {
+    return JSON.parse(req.body);
+  }
+
+  const chunks: string[] = [];
+  if (typeof req[Symbol.asyncIterator] === "function") {
+    for await (const chunk of req as AsyncIterable<Buffer | string>) {
+      chunks.push(typeof chunk === "string" ? chunk : chunk.toString("utf8"));
+    }
+  }
+
+  return JSON.parse(chunks.join("") || "{}");
+}
 
 function appendQueryParams(baseUrl: string, params: Record<string, string | null | undefined>) {
   try {
@@ -31,17 +67,24 @@ function appendQueryParams(baseUrl: string, params: Record<string, string | null
   }
 }
 
-export async function POST(request: Request): Promise<Response> {
+export default async function handler(req: ServerlessRequest, res: ServerlessResponse): Promise<void> {
+  if (req.method !== "POST") {
+    sendJson(res, 405, { error: "Method not allowed" });
+    return;
+  }
+
   if (!isSupabasePaymentServerConfigured()) {
-    return Response.json({ error: "Server configuration error" }, { status: 503 });
+    sendJson(res, 503, { error: "Server configuration error" });
+    return;
   }
 
   if (!isPaymeCheckoutConfigured()) {
-    return Response.json({ error: "Payme checkout not configured" }, { status: 503 });
+    sendJson(res, 503, { error: "Payme checkout not configured" });
+    return;
   }
 
   try {
-    const body = (await request.json()) as {
+    const body = (await readJsonBody(req)) as {
       userId?: string;
       type?: PaymentType;
       tier?: string;
@@ -56,11 +99,13 @@ export async function POST(request: Request): Promise<Response> {
     const returnUrlBase = body.returnUrlBase?.trim();
 
     if (!userId || !returnUrlBase || (type !== "subscription" && type !== "article")) {
-      return Response.json({ error: "Missing required fields" }, { status: 400 });
+      sendJson(res, 400, { error: "Missing required fields" });
+      return;
     }
 
     if (type === "article" && !articleId) {
-      return Response.json({ error: "Article id is required" }, { status: 400 });
+      sendJson(res, 400, { error: "Article id is required" });
+      return;
     }
 
     const pricing = resolvePaymentPricing({ type, tier: body.tier });
@@ -90,7 +135,8 @@ export async function POST(request: Request): Promise<Response> {
 
     if (error || !data) {
       console.error("[Payme create-payment] DB insert error:", error);
-      return Response.json({ error: "Failed to create payment record" }, { status: 500 });
+      sendJson(res, 500, { error: "Failed to create payment record" });
+      return;
     }
 
     const paymentId = String(data.id);
@@ -121,7 +167,7 @@ export async function POST(request: Request): Promise<Response> {
       })
       .eq("id", paymentId);
 
-    return Response.json({
+    sendJson(res, 200, {
       payment_url: paymentUrl,
       payment_id: paymentId,
       provider: "payme",
@@ -131,6 +177,6 @@ export async function POST(request: Request): Promise<Response> {
     });
   } catch (error) {
     console.error("[Payme create-payment] unhandled error:", error);
-    return Response.json({ error: "Internal server error" }, { status: 500 });
+    sendJson(res, 500, { error: "Internal server error" });
   }
 }

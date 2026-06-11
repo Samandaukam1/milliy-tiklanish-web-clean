@@ -22,8 +22,22 @@ import {
   validatePaymeAuthorizationHeader,
   type PaymentRecord,
   type PaymentTransactionRecord,
-} from "@/lib/server/payme";
+} from "../../lib/server/payme";
 import type { SupabaseClient } from "@supabase/supabase-js";
+
+type ServerlessRequest = {
+  method?: string;
+  headers: Record<string, string | string[] | undefined>;
+  body?: unknown;
+  query?: Record<string, string | string[] | undefined>;
+  [Symbol.asyncIterator]?: () => AsyncIterator<Buffer | string>;
+};
+
+type ServerlessResponse = {
+  setHeader(name: string, value: string): void;
+  status(code: number): ServerlessResponse;
+  json(body: unknown): void;
+};
 
 type PaymeRpcId = string | number | null | undefined;
 
@@ -82,6 +96,34 @@ function asString(value: unknown): string {
 function asNumber(value: unknown): number {
   const parsed = typeof value === "number" ? value : Number(value);
   return Number.isFinite(parsed) ? Math.trunc(parsed) : 0;
+}
+
+function getHeader(req: ServerlessRequest, name: string): string | null {
+  const value = req.headers[name] ?? req.headers[name.toLowerCase()];
+  if (Array.isArray(value)) {
+    return value[0] ?? null;
+  }
+
+  return typeof value === "string" ? value : null;
+}
+
+async function readJsonBody(req: ServerlessRequest): Promise<unknown> {
+  if (req.body && typeof req.body === "object") {
+    return req.body;
+  }
+
+  if (typeof req.body === "string") {
+    return JSON.parse(req.body);
+  }
+
+  const chunks: string[] = [];
+  if (typeof req[Symbol.asyncIterator] === "function") {
+    for await (const chunk of req as AsyncIterable<Buffer | string>) {
+      chunks.push(typeof chunk === "string" ? chunk : chunk.toString("utf8"));
+    }
+  }
+
+  return JSON.parse(chunks.join("") || "{}");
 }
 
 function localizedMessage(uz: string, ru = uz, en = uz): LocalizedMessage {
@@ -171,19 +213,15 @@ function getResponsePaymentId(body: PaymeRpcResponseBody, fallback?: string | nu
 }
 
 function extractErrorMessage(error: PaymeRpcError | undefined): unknown {
-  if (!error) {
-    return null;
-  }
-
-  return error.message;
+  return error?.message ?? null;
 }
 
-async function sendRpcResponse(
+async function buildRpcResponse(
   admin: SupabaseClient,
   payload: PaymeMerchantRequest,
   body: PaymeRpcResponseBody,
   meta: ResponseMeta = {}
-): Promise<Response> {
+): Promise<PaymeRpcResponseBody> {
   const params = asObject(payload.params);
   const externalTransactionId = meta.externalTransactionId ?? (asString(params.id) || null);
   const paymentId = meta.paymentId ?? getResponsePaymentId(body, meta.paymentId ?? null);
@@ -202,7 +240,7 @@ async function sendRpcResponse(
     errorMessage: extractErrorMessage(body.error),
   });
 
-  return Response.json(body);
+  return body;
 }
 
 function createResult(transaction: PaymentTransactionRecord): Record<string, unknown> {
@@ -275,7 +313,7 @@ async function validatePaymentForPayme(
 async function handleCheckPerformTransaction(
   admin: SupabaseClient,
   payload: PaymeMerchantRequest
-): Promise<Response> {
+): Promise<PaymeRpcResponseBody> {
   const params = asObject(payload.params);
   const account = asObject(params.account);
   const amountTiyin = asNumber(params.amount);
@@ -283,15 +321,15 @@ async function handleCheckPerformTransaction(
   const payment = paymentId ? await getPaymentById(admin, paymentId) : null;
 
   if (!payment) {
-    return sendRpcResponse(admin, payload, accountValidationError(payload.id, "payment_id"), { paymentId });
+    return buildRpcResponse(admin, payload, accountValidationError(payload.id, "payment_id"), { paymentId });
   }
 
   const validationError = await validatePaymentForPayme(admin, payload, payment, account, amountTiyin);
   if (validationError) {
-    return sendRpcResponse(admin, payload, validationError, { paymentId: payment.id });
+    return buildRpcResponse(admin, payload, validationError, { paymentId: payment.id });
   }
 
-  return sendRpcResponse(
+  return buildRpcResponse(
     admin,
     payload,
     successBody(payload.id, {
@@ -311,7 +349,7 @@ async function handleCheckPerformTransaction(
 async function handleCreateTransaction(
   admin: SupabaseClient,
   payload: PaymeMerchantRequest
-): Promise<Response> {
+): Promise<PaymeRpcResponseBody> {
   const params = asObject(payload.params);
   const externalTransactionId = asString(params.id);
   const paymeTime = asNumber(params.time) || Date.now();
@@ -321,11 +359,11 @@ async function handleCreateTransaction(
   const payment = paymentId ? await getPaymentById(admin, paymentId) : null;
 
   if (!externalTransactionId) {
-    return sendRpcResponse(admin, payload, transactionNotFoundError(payload.id), { paymentId });
+    return buildRpcResponse(admin, payload, transactionNotFoundError(payload.id), { paymentId });
   }
 
   if (!payment) {
-    return sendRpcResponse(admin, payload, accountValidationError(payload.id, "payment_id"), {
+    return buildRpcResponse(admin, payload, accountValidationError(payload.id, "payment_id"), {
       paymentId,
       externalTransactionId,
     });
@@ -335,7 +373,7 @@ async function handleCreateTransaction(
   if (existingByExternal) {
     const existingPayment = await getPaymentById(admin, existingByExternal.payment_id);
     if (!existingPayment) {
-      return sendRpcResponse(admin, payload, transactionNotFoundError(payload.id), {
+      return buildRpcResponse(admin, payload, transactionNotFoundError(payload.id), {
         paymentId: existingByExternal.payment_id,
         externalTransactionId,
       });
@@ -343,14 +381,14 @@ async function handleCreateTransaction(
 
     const validationError = await validatePaymentForPayme(admin, payload, existingPayment, account, amountTiyin);
     if (validationError && existingPayment.status !== "paid" && existingPayment.status !== "cancelled") {
-      return sendRpcResponse(admin, payload, validationError, {
+      return buildRpcResponse(admin, payload, validationError, {
         paymentId: existingPayment.id,
         externalTransactionId,
         state: existingByExternal.state,
       });
     }
 
-    return sendRpcResponse(admin, payload, successBody(payload.id, createResult(existingByExternal)), {
+    return buildRpcResponse(admin, payload, successBody(payload.id, createResult(existingByExternal)), {
       paymentId: existingPayment.id,
       externalTransactionId,
       state: existingByExternal.state,
@@ -359,7 +397,7 @@ async function handleCreateTransaction(
 
   const validationError = await validatePaymentForPayme(admin, payload, payment, account, amountTiyin);
   if (validationError) {
-    return sendRpcResponse(admin, payload, validationError, { paymentId: payment.id, externalTransactionId });
+    return buildRpcResponse(admin, payload, validationError, { paymentId: payment.id, externalTransactionId });
   }
 
   const existingByPayment = await getPaymentTransactionByPaymentId(admin, payment.id);
@@ -368,7 +406,7 @@ async function handleCreateTransaction(
       await expirePaymentTransaction(admin, payment, existingByPayment, payload as Record<string, unknown>);
     }
 
-    return sendRpcResponse(admin, payload, cannotPerformError(payload.id), {
+    return buildRpcResponse(admin, payload, cannotPerformError(payload.id), {
       paymentId: payment.id,
       externalTransactionId,
       state: existingByPayment.state,
@@ -401,7 +439,7 @@ async function handleCreateTransaction(
     })
     .eq("id", payment.id);
 
-  return sendRpcResponse(admin, payload, successBody(payload.id, createResult(transaction)), {
+  return buildRpcResponse(admin, payload, successBody(payload.id, createResult(transaction)), {
     paymentId: payment.id,
     externalTransactionId,
     state: PAYME_STATE.CREATED,
@@ -411,7 +449,7 @@ async function handleCreateTransaction(
 async function handlePerformTransaction(
   admin: SupabaseClient,
   payload: PaymeMerchantRequest
-): Promise<Response> {
+): Promise<PaymeRpcResponseBody> {
   const params = asObject(payload.params);
   const externalTransactionId = asString(params.id);
   const transaction = externalTransactionId
@@ -419,12 +457,12 @@ async function handlePerformTransaction(
     : null;
 
   if (!transaction) {
-    return sendRpcResponse(admin, payload, transactionNotFoundError(payload.id), { externalTransactionId });
+    return buildRpcResponse(admin, payload, transactionNotFoundError(payload.id), { externalTransactionId });
   }
 
   const payment = await getPaymentById(admin, transaction.payment_id);
   if (!payment) {
-    return sendRpcResponse(admin, payload, transactionNotFoundError(payload.id), {
+    return buildRpcResponse(admin, payload, transactionNotFoundError(payload.id), {
       paymentId: transaction.payment_id,
       externalTransactionId,
       state: transaction.state,
@@ -432,7 +470,7 @@ async function handlePerformTransaction(
   }
 
   if (transaction.state === PAYME_STATE.PERFORMED) {
-    return sendRpcResponse(admin, payload, successBody(payload.id, performResult(transaction)), {
+    return buildRpcResponse(admin, payload, successBody(payload.id, performResult(transaction)), {
       paymentId: payment.id,
       externalTransactionId,
       state: PAYME_STATE.PERFORMED,
@@ -440,7 +478,7 @@ async function handlePerformTransaction(
   }
 
   if (transaction.state < 0) {
-    return sendRpcResponse(admin, payload, cannotPerformError(payload.id), {
+    return buildRpcResponse(admin, payload, cannotPerformError(payload.id), {
       paymentId: payment.id,
       externalTransactionId,
       state: transaction.state,
@@ -449,7 +487,7 @@ async function handlePerformTransaction(
 
   if (isTransactionExpired(transaction)) {
     await expirePaymentTransaction(admin, payment, transaction, payload as Record<string, unknown>);
-    return sendRpcResponse(admin, payload, cannotPerformError(payload.id, "Tranzaksiya muddati tugagan"), {
+    return buildRpcResponse(admin, payload, cannotPerformError(payload.id, "Tranzaksiya muddati tugagan"), {
       paymentId: payment.id,
       externalTransactionId,
       state: PAYME_STATE.CANCELLED,
@@ -458,7 +496,7 @@ async function handlePerformTransaction(
 
   const eligibility = await getUserPaymentEligibility(admin, payment.user_id);
   if (!eligibility.exists || !eligibility.active) {
-    return sendRpcResponse(admin, payload, accountValidationError(payload.id, eligibility.data ?? "user_id"), {
+    return buildRpcResponse(admin, payload, accountValidationError(payload.id, eligibility.data ?? "user_id"), {
       paymentId: payment.id,
       externalTransactionId,
       state: transaction.state,
@@ -484,7 +522,7 @@ async function handlePerformTransaction(
     paid_at: paidAt,
   });
 
-  return sendRpcResponse(admin, payload, successBody(payload.id, performResult(nextTransaction)), {
+  return buildRpcResponse(admin, payload, successBody(payload.id, performResult(nextTransaction)), {
     paymentId: payment.id,
     externalTransactionId,
     state: PAYME_STATE.PERFORMED,
@@ -494,7 +532,7 @@ async function handlePerformTransaction(
 async function handleCancelTransaction(
   admin: SupabaseClient,
   payload: PaymeMerchantRequest
-): Promise<Response> {
+): Promise<PaymeRpcResponseBody> {
   const params = asObject(payload.params);
   const externalTransactionId = asString(params.id);
   const reason = asNumber(params.reason) || null;
@@ -503,12 +541,12 @@ async function handleCancelTransaction(
     : null;
 
   if (!transaction) {
-    return sendRpcResponse(admin, payload, transactionNotFoundError(payload.id), { externalTransactionId });
+    return buildRpcResponse(admin, payload, transactionNotFoundError(payload.id), { externalTransactionId });
   }
 
   const payment = await getPaymentById(admin, transaction.payment_id);
   if (!payment) {
-    return sendRpcResponse(admin, payload, transactionNotFoundError(payload.id), {
+    return buildRpcResponse(admin, payload, transactionNotFoundError(payload.id), {
       paymentId: transaction.payment_id,
       externalTransactionId,
       state: transaction.state,
@@ -516,7 +554,7 @@ async function handleCancelTransaction(
   }
 
   if (transaction.state === PAYME_STATE.CANCELLED || transaction.state === PAYME_STATE.CANCELLED_AFTER_PERFORM) {
-    return sendRpcResponse(admin, payload, successBody(payload.id, cancelResult(transaction)), {
+    return buildRpcResponse(admin, payload, successBody(payload.id, cancelResult(transaction)), {
       paymentId: payment.id,
       externalTransactionId,
       state: transaction.state,
@@ -543,7 +581,7 @@ async function handleCancelTransaction(
     await revokePaymentEntitlement(admin, payment);
   }
 
-  return sendRpcResponse(admin, payload, successBody(payload.id, cancelResult(nextTransaction)), {
+  return buildRpcResponse(admin, payload, successBody(payload.id, cancelResult(nextTransaction)), {
     paymentId: payment.id,
     externalTransactionId,
     state: nextState,
@@ -553,7 +591,7 @@ async function handleCancelTransaction(
 async function handleCheckTransaction(
   admin: SupabaseClient,
   payload: PaymeMerchantRequest
-): Promise<Response> {
+): Promise<PaymeRpcResponseBody> {
   const params = asObject(payload.params);
   const externalTransactionId = asString(params.id);
   const transaction = externalTransactionId
@@ -561,10 +599,10 @@ async function handleCheckTransaction(
     : null;
 
   if (!transaction) {
-    return sendRpcResponse(admin, payload, transactionNotFoundError(payload.id), { externalTransactionId });
+    return buildRpcResponse(admin, payload, transactionNotFoundError(payload.id), { externalTransactionId });
   }
 
-  return sendRpcResponse(admin, payload, successBody(payload.id, checkResult(transaction)), {
+  return buildRpcResponse(admin, payload, successBody(payload.id, checkResult(transaction)), {
     paymentId: transaction.payment_id,
     externalTransactionId,
     state: transaction.state,
@@ -574,13 +612,13 @@ async function handleCheckTransaction(
 async function handleGetStatement(
   admin: SupabaseClient,
   payload: PaymeMerchantRequest
-): Promise<Response> {
+): Promise<PaymeRpcResponseBody> {
   const params = asObject(payload.params);
   const from = asNumber(params.from);
   const to = asNumber(params.to);
   const transactions = await getPaymentTransactionsForStatement(admin, from, to);
 
-  return sendRpcResponse(
+  return buildRpcResponse(
     admin,
     payload,
     successBody(payload.id, {
@@ -600,62 +638,92 @@ async function handleGetStatement(
   );
 }
 
-export function GET(): Response {
-  return Response.json(
-    errorBody(
-      null,
-      PAYME_ERROR.METHOD_NOT_POST,
-      localizedMessage("Faqat POST so'rovi qabul qilinadi", "Метод запроса должен быть POST", "Only POST requests are allowed")
-    )
-  );
+function sendJson(res: ServerlessResponse, statusCode: number, body: unknown): void {
+  res.setHeader("Content-Type", "application/json; charset=utf-8");
+  res.status(statusCode).json(body);
 }
 
-export async function POST(request: Request): Promise<Response> {
-  if (!isSupabasePaymentServerConfigured() || !isPaymeMerchantConfigured()) {
-    return Response.json(errorBody(null, PAYME_ERROR.SYSTEM, "Merchant configuration error"));
+export default async function handler(req: ServerlessRequest, res: ServerlessResponse): Promise<void> {
+  if (req.method === "GET") {
+    sendJson(res, 200, {
+      service: "payme-merchant",
+      status: "ok",
+    });
+    return;
   }
 
-  if (!validatePaymeAuthorizationHeader(request.headers.get("authorization"))) {
-    return Response.json(errorBody(null, PAYME_ERROR.AUTH, "Insufficient privileges"));
+  if (req.method !== "POST") {
+    sendJson(
+      res,
+      405,
+      errorBody(
+        null,
+        PAYME_ERROR.METHOD_NOT_POST,
+        localizedMessage("Faqat POST so'rovi qabul qilinadi", "Метод запроса должен быть POST", "Only POST requests are allowed")
+      )
+    );
+    return;
+  }
+
+  if (!isSupabasePaymentServerConfigured() || !isPaymeMerchantConfigured()) {
+    sendJson(res, 200, errorBody(null, PAYME_ERROR.SYSTEM, "Merchant configuration error"));
+    return;
+  }
+
+  if (!validatePaymeAuthorizationHeader(getHeader(req, "authorization"))) {
+    sendJson(res, 200, errorBody(null, PAYME_ERROR.AUTH, "Insufficient privileges"));
+    return;
   }
 
   let payload: PaymeMerchantRequest;
   try {
-    payload = (await request.json()) as PaymeMerchantRequest;
+    payload = (await readJsonBody(req)) as PaymeMerchantRequest;
   } catch {
-    return Response.json(errorBody(null, PAYME_ERROR.PARSE_ERROR, "Parse error"));
+    sendJson(res, 200, errorBody(null, PAYME_ERROR.PARSE_ERROR, "Parse error"));
+    return;
   }
 
   const method = payload.method?.trim() ?? "";
   if (!method || payload.params == null || typeof payload.params !== "object") {
-    return Response.json(errorBody(payload.id, PAYME_ERROR.INVALID_REQUEST, "Invalid Request"));
+    sendJson(res, 200, errorBody(payload.id, PAYME_ERROR.INVALID_REQUEST, "Invalid Request"));
+    return;
   }
 
   try {
     const admin = createPaymentsAdminClient();
+    let body: PaymeRpcResponseBody;
 
     switch (method) {
       case "CheckPerformTransaction":
-        return handleCheckPerformTransaction(admin, payload);
+        body = await handleCheckPerformTransaction(admin, payload);
+        break;
       case "CreateTransaction":
-        return handleCreateTransaction(admin, payload);
+        body = await handleCreateTransaction(admin, payload);
+        break;
       case "PerformTransaction":
-        return handlePerformTransaction(admin, payload);
+        body = await handlePerformTransaction(admin, payload);
+        break;
       case "CancelTransaction":
-        return handleCancelTransaction(admin, payload);
+        body = await handleCancelTransaction(admin, payload);
+        break;
       case "CheckTransaction":
-        return handleCheckTransaction(admin, payload);
+        body = await handleCheckTransaction(admin, payload);
+        break;
       case "GetStatement":
-        return handleGetStatement(admin, payload);
+        body = await handleGetStatement(admin, payload);
+        break;
       default:
-        return sendRpcResponse(
+        body = await buildRpcResponse(
           admin,
           payload,
           errorBody(payload.id, PAYME_ERROR.METHOD_NOT_FOUND, "Method not found", method)
         );
+        break;
     }
+
+    sendJson(res, 200, body);
   } catch (error) {
     console.error("[Payme merchant] error:", error);
-    return Response.json(errorBody(payload.id, PAYME_ERROR.SYSTEM, "System error"));
+    sendJson(res, 200, errorBody(payload.id, PAYME_ERROR.SYSTEM, "System error"));
   }
 }

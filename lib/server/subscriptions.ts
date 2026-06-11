@@ -1,5 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import type { SubscriptionInfo, SubscriptionPlan, SubscriptionStatus } from "@/lib/types";
+import type { SubscriptionInfo, SubscriptionPlan, SubscriptionStatus } from "../types";
 
 const SUBSCRIPTION_TABLES = ["subscriptions", "user_subscriptions"] as const;
 

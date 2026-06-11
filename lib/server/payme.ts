@@ -1,8 +1,8 @@
 import { Buffer } from "node:buffer";
 import { timingSafeEqual } from "node:crypto";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
-import { normalizeSubscriptionPlan, readSubscriptionInfo, upsertSubscriptionInfo } from "@/lib/server/subscriptions";
-import type { SubscriptionInfo, SubscriptionPlan } from "@/lib/types";
+import { normalizeSubscriptionPlan, readSubscriptionInfo, upsertSubscriptionInfo } from "./subscriptions";
+import type { SubscriptionInfo, SubscriptionPlan } from "../types";
 
 export type PaymentType = "subscription" | "article";
 
