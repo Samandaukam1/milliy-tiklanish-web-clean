@@ -11,8 +11,10 @@ https://mtgazeta.uz/api/payme/merchant
 Set these as server-only variables in Vercel. Do not expose them with `EXPO_PUBLIC_`.
 
 ```env
+PAYME_TEST_MODE=true
 PAYME_MERCHANT_ID=6a0aa667f424d415a5bc18da
-PAYME_KEY=<TEST_KEY from Payme Business sandbox>
+PAYME_TEST_KEY=<TEST_KEY from Payme Business sandbox>
+PAYME_KEY=<production key only; leave empty in sandbox>
 PAYME_MERCHANT_LOGIN=Paycom
 PAYME_CHECKOUT_URL=https://checkout.paycom.uz
 PAYME_MXIK_CODE=10899004001000000
@@ -22,7 +24,7 @@ SUPABASE_URL=<supabase project url>
 SUPABASE_SERVICE_ROLE_KEY=<service role key>
 ```
 
-For sandbox verification at `https://test.paycom.uz`, use the Merchant ID above, the TEST_KEY from the Payme cabinet, and the endpoint URL.
+For sandbox verification at `https://test.paycom.uz`, use the Merchant ID above, set `PAYME_TEST_KEY` to the TEST_KEY from the Payme cabinet, and use the endpoint URL. When `PAYME_TEST_MODE=true`, checkout links are generated with `https://test.paycom.uz` and `PAYME_KEY` is ignored.
 
 ## Database
 
@@ -72,7 +74,7 @@ Headers:
 
 ```text
 Content-Type: application/json
-Authorization: Basic <base64(Paycom:{{PAYME_KEY}})>
+Authorization: Basic <base64(Paycom:{{PAYME_TEST_KEY}})>
 ```
 
 Postman Authorization tab:
@@ -80,13 +82,13 @@ Postman Authorization tab:
 ```text
 Type: Basic Auth
 Username: Paycom
-Password: {{PAYME_KEY}}
+Password: {{PAYME_TEST_KEY}}
 ```
 
 Suggested variables:
 
 ```text
-PAYME_KEY=<TEST_KEY from Payme cabinet>
+PAYME_TEST_KEY=<TEST_KEY from Payme cabinet>
 payment_id=<payment_id from /api/payme/create-payment>
 user_id=<existing_profiles_id>
 payme_transaction_id=payme-sandbox-{{$timestamp}}
@@ -279,7 +281,7 @@ Expected error: `-31008`; local transaction becomes `state = -1`, `reason = 4`.
 ## Payme Sandbox Flow
 
 1. Deploy the API to Vercel.
-2. Set `PAYME_MERCHANT_ID`, `PAYME_KEY`, `SUPABASE_URL`, and `SUPABASE_SERVICE_ROLE_KEY` in Vercel.
+2. Set `PAYME_TEST_MODE=true`, `PAYME_MERCHANT_ID`, `PAYME_TEST_KEY`, `SUPABASE_URL`, and `SUPABASE_SERVICE_ROLE_KEY` in Vercel.
 3. Run [supabase-payme.sql](../supabase-payme.sql).
 4. Create a real pending payment from the app or `/api/payme/create-payment`.
 5. Open `https://test.paycom.uz`.

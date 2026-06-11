@@ -108,22 +108,33 @@ const PAYME_TRANSACTION_TABLE = "payme_transactions";
 const LEGACY_PAYME_TRANSACTION_TABLE = "payment_transactions";
 const PAYMENT_LOG_TABLE = "payment_logs";
 const PAYME_CANCEL_REASON_TIMEOUT = 4;
+const DEFAULT_PAYME_MERCHANT_ID = "6a0aa667f424d415a5bc18da";
+const PAYME_PRODUCTION_CHECKOUT_URL = "https://checkout.paycom.uz";
+const PAYME_SANDBOX_CHECKOUT_URL = "https://test.paycom.uz";
 
-const PAYME_MERCHANT_ID = process.env.PAYME_MERCHANT_ID?.trim() ?? "";
+function isEnabledEnv(value: string | undefined): boolean {
+  return ["1", "true", "yes", "on"].includes((value ?? "").trim().toLowerCase());
+}
 
-// Accept PAYME_KEY (production) or PAYME_TEST_KEY (sandbox/test).
-// Fall back to legacy PAYME_MERCHANT_KEY for backwards compatibility.
+const PAYME_TEST_MODE = isEnabledEnv(process.env.PAYME_TEST_MODE);
+const PAYME_MERCHANT_ID = process.env.PAYME_MERCHANT_ID?.trim() || DEFAULT_PAYME_MERCHANT_ID;
+
+// In sandbox mode we intentionally do not fall back to PAYME_KEY, so a
+// production key cannot be accepted by the sandbox merchant endpoint.
 const _paymeProductionKey = process.env.PAYME_KEY?.trim() ?? "";
 const _paymeTestKey = process.env.PAYME_TEST_KEY?.trim() ?? "";
 const _paymeLegacyKey = process.env.PAYME_MERCHANT_KEY?.trim() ?? "";
-
-// The active secret used to validate incoming Basic-Auth from Payme.
-// Prefer the explicit production key, then test key, then legacy.
-const PAYME_MERCHANT_KEY = _paymeProductionKey || _paymeTestKey || _paymeLegacyKey;
+const PAYME_MERCHANT_KEY = PAYME_TEST_MODE
+  ? _paymeTestKey
+  : _paymeProductionKey || _paymeLegacyKey;
 
 // Payme Basic-Auth login is "Paycom" unless the cashier is configured otherwise.
 const PAYME_MERCHANT_LOGIN = process.env.PAYME_MERCHANT_LOGIN?.trim() || "Paycom";
-const PAYME_CHECKOUT_BASE_URL = (process.env.PAYME_CHECKOUT_URL?.trim() || "https://checkout.paycom.uz").replace(/\/+$/, "");
+const PAYME_CHECKOUT_BASE_URL = (
+  PAYME_TEST_MODE
+    ? PAYME_SANDBOX_CHECKOUT_URL
+    : process.env.PAYME_CHECKOUT_URL?.trim() || PAYME_PRODUCTION_CHECKOUT_URL
+).replace(/\/+$/, "");
 
 const PAYME_RECEIPT_CODE = process.env.PAYME_MXIK_CODE?.trim() || DEFAULT_RECEIPT_CODE;
 const PAYME_RECEIPT_PACKAGE_CODE = process.env.PAYME_PACKAGE_CODE?.trim() || DEFAULT_PACKAGE_CODE;
