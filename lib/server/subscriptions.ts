@@ -25,6 +25,13 @@ type UpsertSubscriptionOptions = {
   strict?: boolean;
 };
 
+type SubscriptionInfoInput = {
+  plan?: unknown;
+  status?: unknown;
+  starts_at?: unknown;
+  expires_at?: unknown;
+};
+
 function asOptionalString(value: unknown): string | null {
   if (typeof value !== "string") {
     return null;
@@ -76,7 +83,7 @@ export function normalizeSubscriptionStatus(value: unknown): SubscriptionStatus 
   return "active";
 }
 
-export function buildSubscriptionInfo(input: Partial<SubscriptionInfo> | null | undefined, fallbackPlan: unknown = "free"): SubscriptionInfo {
+export function buildSubscriptionInfo(input: SubscriptionInfoInput | null | undefined, fallbackPlan: unknown = "free"): SubscriptionInfo {
   const plan = normalizeSubscriptionPlan(input?.plan ?? fallbackPlan);
 
   return {
@@ -153,7 +160,7 @@ export async function upsertSubscriptionInfo(
     plan
   );
 
-  const payloadVariants: Array<Record<string, unknown>> = [
+  const payloadVariants: Record<string, unknown>[] = [
     {
       user_id: input.userId,
       plan,

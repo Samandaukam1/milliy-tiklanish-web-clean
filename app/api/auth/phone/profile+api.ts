@@ -1,4 +1,4 @@
-import { createClient } from "@supabase/supabase-js";
+import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { readSubscriptionInfo } from "@/lib/server/subscriptions";
 
 const SUPABASE_URL =
@@ -10,6 +10,8 @@ type PhoneProfilePayload = {
   last_name?: string | null;
   birth_date?: string | null;
 };
+
+type AnySupabaseClient = SupabaseClient<any, any, any, any, any>;
 
 function normalizeNamePart(value: unknown): string | null {
   if (typeof value !== "string") {
@@ -37,7 +39,7 @@ function needsRegistration(profile: Record<string, any> | null): boolean {
   return !profile.first_name && !profile.last_name && !profile.full_name && !profile.name;
 }
 
-async function selectProfile(admin: ReturnType<typeof createClient>, userId: string) {
+async function selectProfile(admin: AnySupabaseClient, userId: string) {
   return await (admin
     .from("profiles") as any)
     .select(
@@ -47,7 +49,7 @@ async function selectProfile(admin: ReturnType<typeof createClient>, userId: str
     .maybeSingle();
 }
 
-async function upsertProfile(admin: ReturnType<typeof createClient>, payload: Record<string, unknown>) {
+async function upsertProfile(admin: AnySupabaseClient, payload: Record<string, unknown>) {
   return await (admin
     .from("profiles") as any)
     .upsert(payload, {

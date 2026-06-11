@@ -44,6 +44,27 @@ export type PaymentTransactionRecord = {
   raw_request: Record<string, unknown>;
 };
 
+export type PaymentLogInput = {
+  paymentId?: string | null;
+  event: string;
+  method?: string | null;
+  requestId?: string | number | null;
+  externalTransactionId?: string | null;
+  state?: number | null;
+  status?: string | null;
+  requestPayload?: Record<string, unknown> | null;
+  responsePayload?: Record<string, unknown> | null;
+  errorCode?: number | null;
+  errorMessage?: unknown;
+};
+
+export type UserPaymentEligibility = {
+  exists: boolean;
+  active: boolean;
+  table: "profiles" | "users" | null;
+  data?: string;
+};
+
 export type PaymentAccessResult = {
   allowed: boolean;
   source: "free" | "subscription" | "article_purchase" | "none";
@@ -60,8 +81,11 @@ export const PAYME_STATE = {
 } as const;
 
 export const PAYME_ERROR = {
+  METHOD_NOT_POST: -32300,
+  PARSE_ERROR: -32700,
   INVALID_REQUEST: -32600,
   METHOD_NOT_FOUND: -32601,
+  INVALID_PARAMS: -32602,
   SYSTEM: -32400,
   AUTH: -32504,
   INVALID_AMOUNT: -31001,
@@ -80,6 +104,10 @@ const DEFAULT_SINGLE_ARTICLE_AMOUNT_SUM = 9900;
 const DEFAULT_RECEIPT_CODE = "10899004001000000";
 const DEFAULT_PACKAGE_CODE = "123456";
 const DEFAULT_VAT_PERCENT = 12;
+const PAYME_TRANSACTION_TABLE = "payme_transactions";
+const LEGACY_PAYME_TRANSACTION_TABLE = "payment_transactions";
+const PAYMENT_LOG_TABLE = "payment_logs";
+const PAYME_CANCEL_REASON_TIMEOUT = 4;
 
 const PAYME_MERCHANT_ID = process.env.PAYME_MERCHANT_ID?.trim() ?? "";
 
@@ -93,12 +121,9 @@ const _paymeLegacyKey = process.env.PAYME_MERCHANT_KEY?.trim() ?? "";
 // Prefer the explicit production key, then test key, then legacy.
 const PAYME_MERCHANT_KEY = _paymeProductionKey || _paymeTestKey || _paymeLegacyKey;
 
-// Payme Basic-Auth login is always "Paycom" (per Payme docs).
-// Fall back to the merchant ID, then the legacy PAYME_MERCHANT_LOGIN env var.
-const PAYME_MERCHANT_LOGIN =
-  "Paycom" ||
-  PAYME_MERCHANT_ID ||
-  (process.env.PAYME_MERCHANT_LOGIN?.trim() ?? "");
+// Payme Basic-Auth login is "Paycom" unless the cashier is configured otherwise.
+const PAYME_MERCHANT_LOGIN = process.env.PAYME_MERCHANT_LOGIN?.trim() || "Paycom";
+const PAYME_CHECKOUT_BASE_URL = (process.env.PAYME_CHECKOUT_URL?.trim() || "https://checkout.paycom.uz").replace(/\/+$/, "");
 
 const PAYME_RECEIPT_CODE = process.env.PAYME_MXIK_CODE?.trim() || DEFAULT_RECEIPT_CODE;
 const PAYME_RECEIPT_PACKAGE_CODE = process.env.PAYME_PACKAGE_CODE?.trim() || DEFAULT_PACKAGE_CODE;
@@ -140,6 +165,14 @@ function asObject(value: unknown): Record<string, unknown> {
   }
 
   return value as Record<string, unknown>;
+}
+
+function formatSupabaseError(error: { message?: string | null; details?: string | null; hint?: string | null; code?: string | null } | null | undefined): string {
+  return [error?.message, error?.details, error?.hint, error?.code].filter(Boolean).join(" | ");
+}
+
+function isMissingSchemaError(errorText: string): boolean {
+  return /relation .* does not exist|table .* does not exist|column .* does not exist|schema cache|could not find/i.test(errorText);
 }
 
 function compareSecrets(left: string, right: string): boolean {
@@ -307,7 +340,7 @@ export function buildPaymeCheckoutUrl(input: {
     .map(([key, value]) => `${key}=${encodeURIComponent(String(value))}`)
     .join(";");
 
-  return `https://checkout.paycom.uz/${Buffer.from(rawPayload, "utf8").toString("base64")}`;
+  return `${PAYME_CHECKOUT_BASE_URL}/${Buffer.from(rawPayload, "utf8").toString("base64")}`;
 }
 
 export function validatePaymeAuthorizationHeader(authorizationHeader: string | null) {
@@ -369,38 +402,69 @@ export async function getPaymentById(admin: SupabaseClient, paymentId: string): 
 }
 
 export async function getPaymentTransactionByExternalId(admin: SupabaseClient, externalTransactionId: string): Promise<PaymentTransactionRecord | null> {
-  const { data, error } = await (admin.from("payment_transactions") as any)
-    .select("*")
-    .eq("external_transaction_id", externalTransactionId)
-    .maybeSingle();
+  for (const table of [PAYME_TRANSACTION_TABLE, LEGACY_PAYME_TRANSACTION_TABLE]) {
+    const { data, error } = await (admin.from(table) as any)
+      .select("*")
+      .eq("external_transaction_id", externalTransactionId)
+      .maybeSingle();
 
-  if (error || !data) {
-    return null;
+    if (!error && data) {
+      return normalizePaymentTransactionRecord(data as Record<string, unknown>);
+    }
+
+    const errorText = formatSupabaseError(error);
+    if (error && !isMissingSchemaError(errorText)) {
+      console.warn("[payme] Failed to read transaction", { table, error: errorText });
+      return null;
+    }
   }
 
-  return normalizePaymentTransactionRecord(data as Record<string, unknown>);
+  return null;
 }
 
 export async function getPaymentTransactionByPaymentId(admin: SupabaseClient, paymentId: string): Promise<PaymentTransactionRecord | null> {
-  const { data, error } = await (admin.from("payment_transactions") as any)
-    .select("*")
-    .eq("payment_id", paymentId)
-    .order("create_time", { ascending: false })
-    .limit(1)
-    .maybeSingle();
+  for (const table of [PAYME_TRANSACTION_TABLE, LEGACY_PAYME_TRANSACTION_TABLE]) {
+    const { data, error } = await (admin.from(table) as any)
+      .select("*")
+      .eq("payment_id", paymentId)
+      .order("create_time", { ascending: false })
+      .limit(1)
+      .maybeSingle();
 
-  if (error || !data) {
-    return null;
+    if (!error && data) {
+      return normalizePaymentTransactionRecord(data as Record<string, unknown>);
+    }
+
+    const errorText = formatSupabaseError(error);
+    if (error && !isMissingSchemaError(errorText)) {
+      console.warn("[payme] Failed to read transaction by payment", { table, error: errorText });
+      return null;
+    }
   }
 
-  return normalizePaymentTransactionRecord(data as Record<string, unknown>);
+  return null;
+}
+
+export async function getPaymentTransactionsForStatement(admin: SupabaseClient, from: number, to: number): Promise<PaymentTransactionRecord[]> {
+  const { data, error } = await (admin.from(PAYME_TRANSACTION_TABLE) as any)
+    .select("*")
+    .gte("payme_time", from)
+    .lte("payme_time", to)
+    .order("payme_time", { ascending: true });
+
+  if (error) {
+    const errorText = formatSupabaseError(error);
+    throw new Error(errorText || "payme_statement_read_failed");
+  }
+
+  return (Array.isArray(data) ? data : []).map((row) => normalizePaymentTransactionRecord(row as Record<string, unknown>));
 }
 
 export async function upsertPaymentTransaction(
   admin: SupabaseClient,
   transaction: PaymentTransactionRecord
 ) {
-  await (admin.from("payment_transactions") as any).upsert(
+  await (admin.from(PAYME_TRANSACTION_TABLE) as any).upsert(
     {
       payment_id: transaction.payment_id,
       provider: "payme",
@@ -424,20 +488,94 @@ export async function upsertPaymentTransaction(
   );
 }
 
+export async function logPaymentEvent(admin: SupabaseClient, input: PaymentLogInput): Promise<void> {
+  try {
+    const { error } = await (admin.from(PAYMENT_LOG_TABLE) as any).insert({
+      payment_id: input.paymentId ?? null,
+      provider: "payme",
+      event: input.event,
+      method: input.method ?? null,
+      request_id: input.requestId == null ? null : String(input.requestId),
+      external_transaction_id: input.externalTransactionId ?? null,
+      state: input.state ?? null,
+      status: input.status ?? null,
+      request_payload: input.requestPayload ?? {},
+      response_payload: input.responsePayload ?? {},
+      error_code: input.errorCode ?? null,
+      error_message: input.errorMessage ?? null,
+    });
+
+    if (error) {
+      const errorText = formatSupabaseError(error);
+      if (!isMissingSchemaError(errorText)) {
+        console.warn("[payme] Failed to write payment log", errorText);
+      }
+    }
+  } catch (error) {
+    console.warn("[payme] Failed to write payment log", error);
+  }
+}
+
+function isInactiveUserRow(row: Record<string, unknown>): string | null {
+  const status = asOptionalString(row.status)?.toLowerCase();
+  if (status && ["inactive", "blocked", "banned", "deleted", "disabled"].includes(status)) {
+    return "status";
+  }
+
+  if (row.is_active === false || row.active === false) {
+    return "is_active";
+  }
+
+  if (row.deleted_at || row.blocked_at || row.banned_at) {
+    return "status";
+  }
+
+  return null;
+}
+
+export async function getUserPaymentEligibility(admin: SupabaseClient, userId: string): Promise<UserPaymentEligibility> {
+  for (const table of ["profiles", "users"] as const) {
+    const { data, error } = await (admin.from(table) as any)
+      .select("*")
+      .eq("id", userId)
+      .maybeSingle();
+
+    if (!error && data) {
+      const inactiveField = isInactiveUserRow(data as Record<string, unknown>);
+      return {
+        exists: true,
+        active: !inactiveField,
+        table,
+        data: inactiveField ?? undefined,
+      };
+    }
+
+    const errorText = formatSupabaseError(error);
+    if (error && !isMissingSchemaError(errorText)) {
+      console.warn("[payme] Failed to check user eligibility", { table, error: errorText });
+      return { exists: false, active: false, table, data: "user_id" };
+    }
+  }
+
+  return { exists: false, active: false, table: null, data: "user_id" };
+}
+
 export function validatePaymentAccount(payment: PaymentRecord, account: Record<string, unknown>) {
   if (asOptionalString(account.payment_id) !== payment.id) {
     return "payment_id";
   }
 
-  if (asOptionalString(account.user_id) !== payment.user_id) {
+  const accountUserId = asOptionalString(account.user_id);
+  if (accountUserId && accountUserId !== payment.user_id) {
     return "user_id";
   }
 
-  if (asOptionalString(account.type) !== payment.type) {
+  const accountType = asOptionalString(account.type);
+  if (accountType && accountType !== payment.type) {
     return "type";
   }
 
-  if (payment.type === "subscription") {
+  if (payment.type === "subscription" && asOptionalString(account.tier)) {
     const expectedTier = normalizeSubscriptionPlan(payment.tier);
     const actualTier = normalizeSubscriptionPlan(account.tier);
     if (expectedTier !== actualTier) {
@@ -445,7 +583,8 @@ export function validatePaymentAccount(payment: PaymentRecord, account: Record<s
     }
   }
 
-  if (payment.type === "article" && payment.article_id && asOptionalString(account.article_id) !== payment.article_id) {
+  const accountArticleId = asOptionalString(account.article_id);
+  if (payment.type === "article" && payment.article_id && accountArticleId && accountArticleId !== payment.article_id) {
     return "article_id";
   }
 
@@ -476,6 +615,31 @@ export function buildPaymeReceiptDetail(payment: PaymentRecord) {
 
 export function isTransactionExpired(transaction: PaymentTransactionRecord, now = Date.now()) {
   return transaction.create_time > 0 && transaction.create_time + PAYME_TRANSACTION_TIMEOUT_MS < now;
+}
+
+export async function expirePaymentTransaction(
+  admin: SupabaseClient,
+  payment: PaymentRecord,
+  transaction: PaymentTransactionRecord,
+  rawRequest: Record<string, unknown>
+) {
+  const cancelTime = Date.now();
+
+  await upsertPaymentTransaction(admin, {
+    ...transaction,
+    state: PAYME_STATE.CANCELLED,
+    reason: PAYME_CANCEL_REASON_TIMEOUT,
+    cancel_time: cancelTime,
+    raw_request: rawRequest,
+  });
+
+  await markPaymentCancelled(
+    admin,
+    payment,
+    transaction.external_transaction_id,
+    PAYME_CANCEL_REASON_TIMEOUT,
+    new Date(cancelTime).toISOString()
+  );
 }
 
 export async function markPaymentPaid(
@@ -518,18 +682,52 @@ export async function markPaymentCancelled(
     .eq("id", payment.id);
 }
 
+async function updateUserSubscriptionColumns(
+  admin: SupabaseClient,
+  userId: string,
+  patch: Record<string, unknown>
+): Promise<void> {
+  for (const table of ["profiles", "users"] as const) {
+    const payloadVariants = [
+      patch,
+      {
+        subscription: patch.subscription,
+        updated_at: patch.updated_at,
+      },
+    ];
+
+    for (const payload of payloadVariants) {
+      const { error } = await (admin.from(table) as any)
+        .update(payload)
+        .eq("id", userId);
+
+      if (!error) {
+        break;
+      }
+
+      const errorText = formatSupabaseError(error);
+      if (isMissingSchemaError(errorText)) {
+        continue;
+      }
+
+      console.warn("[payme] Failed to update user subscription columns", { table, error: errorText });
+      break;
+    }
+  }
+}
+
 export async function grantPaymentEntitlement(admin: SupabaseClient, payment: PaymentRecord) {
   if (payment.type === "subscription") {
     const plan = normalizeSubscriptionPlan(payment.tier);
     const startsAt = payment.paid_at ?? new Date().toISOString();
     const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
 
-    await (admin.from("profiles") as any)
-      .update({
-        subscription: plan,
-        updated_at: new Date().toISOString(),
-      })
-      .eq("id", payment.user_id);
+    await updateUserSubscriptionColumns(admin, payment.user_id, {
+      subscription: plan,
+      subscription_starts_at: startsAt,
+      subscription_expires_at: expiresAt,
+      updated_at: new Date().toISOString(),
+    });
 
     await upsertSubscriptionInfo(
       admin,
@@ -570,12 +768,11 @@ export async function revokePaymentEntitlement(admin: SupabaseClient, payment: P
   if (payment.type === "subscription") {
     const now = new Date().toISOString();
 
-    await (admin.from("profiles") as any)
-      .update({
-        subscription: "free",
-        updated_at: now,
-      })
-      .eq("id", payment.user_id);
+    await updateUserSubscriptionColumns(admin, payment.user_id, {
+      subscription: "free",
+      subscription_expires_at: now,
+      updated_at: now,
+    });
 
     await upsertSubscriptionInfo(
       admin,

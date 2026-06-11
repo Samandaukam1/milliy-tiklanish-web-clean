@@ -26,7 +26,7 @@ function normalizePaymentPlan(value: string | null | undefined): Subscription {
 }
 
 export default function PaymentResultScreen() {
-  const { payment_id, tier } = useLocalSearchParams<{
+  const { payment_id, tier, type, article_id } = useLocalSearchParams<{
     payment_id: string;
     tier: string;
     type?: PaymentType;
