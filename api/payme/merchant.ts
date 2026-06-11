@@ -202,6 +202,19 @@ function cannotPerformError(id: PaymeRpcId, message?: string): PaymeRpcResponseB
   );
 }
 
+function accountBusyError(id: PaymeRpcId): PaymeRpcResponseBody {
+  return errorBody(
+    id,
+    PAYME_ERROR.ACCOUNT_INVALID,
+    localizedMessage(
+      "Bu obuna uchun pending to'lov mavjud",
+      "По этому аккаунту уже есть ожидающий платеж",
+      "A pending payment already exists for this account"
+    ),
+    "account"
+  );
+}
+
 function transactionNotFoundError(id: PaymeRpcId): PaymeRpcResponseBody {
   return errorBody(
     id,
@@ -467,6 +480,8 @@ async function handleCreateTransaction(
   const account = asObject(params.account);
   const paymentId = asString(account.payment_id);
 
+  console.log("[Payme CreateTransaction] payme id:", externalTransactionId || "<empty>");
+
   if (!externalTransactionId) {
     return buildRpcResponse(admin, payload, transactionNotFoundError(payload.id), { paymentId });
   }
@@ -531,7 +546,7 @@ async function handleCreateTransaction(
       await expirePaymentTransaction(admin, payment, existingByPayment, payload as Record<string, unknown>);
     }
 
-    return buildRpcResponse(admin, payload, cannotPerformError(payload.id), {
+    return buildRpcResponse(admin, payload, accountBusyError(payload.id), {
       paymentId: payment.id,
       externalTransactionId,
       state: existingByPayment.state,
@@ -540,8 +555,11 @@ async function handleCreateTransaction(
 
   const createTime = Date.now();
   const transaction: PaymentTransactionRecord = {
+    id: null,
     payment_id: payment.id,
     external_transaction_id: externalTransactionId,
+    payme_transaction_id: externalTransactionId,
+    payme_id: externalTransactionId,
     external_receipt_id: payment.external_receipt_id,
     account,
     amount_tiyin: amountTiyin,
@@ -719,6 +737,7 @@ async function handleCheckTransaction(
 ): Promise<PaymeRpcResponseBody> {
   const params = asObject(payload.params);
   const externalTransactionId = asString(params.id);
+  console.log("[Payme CheckTransaction] lookup id:", externalTransactionId || "<empty>");
   const transaction = externalTransactionId
     ? await getPaymentTransactionByExternalId(admin, externalTransactionId)
     : null;

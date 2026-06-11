@@ -115,12 +115,15 @@ create trigger payments_set_updated_at
 before update on public.payments
 for each row execute function public.set_updated_at();
 
--- Merchant API transaction ledger. Payme's id is external_transaction_id.
+-- Merchant API transaction ledger. Payme's params.id is stored in all Payme id
+-- alias columns for compatibility with existing sandbox schemas.
 create table if not exists public.payme_transactions (
   id uuid primary key default gen_random_uuid(),
   payment_id uuid not null references public.payments(id) on delete cascade,
   provider text not null default 'payme',
   external_transaction_id text not null unique,
+  payme_transaction_id text unique,
+  payme_id text unique,
   external_receipt_id text,
   account jsonb not null default '{}'::jsonb,
   amount_tiyin bigint not null,
@@ -136,15 +139,59 @@ create table if not exists public.payme_transactions (
 );
 
 alter table public.payme_transactions add column if not exists provider text not null default 'payme';
+alter table public.payme_transactions add column if not exists external_transaction_id text;
+alter table public.payme_transactions add column if not exists payme_transaction_id text;
+alter table public.payme_transactions add column if not exists payme_id text;
 alter table public.payme_transactions add column if not exists external_receipt_id text;
 alter table public.payme_transactions add column if not exists account jsonb not null default '{}'::jsonb;
 alter table public.payme_transactions add column if not exists raw_request jsonb not null default '{}'::jsonb;
 alter table public.payme_transactions add column if not exists created_at timestamptz not null default now();
 alter table public.payme_transactions add column if not exists updated_at timestamptz not null default now();
 
+update public.payme_transactions
+set external_transaction_id = coalesce(external_transaction_id, payme_transaction_id, payme_id)
+where external_transaction_id is null
+  and coalesce(payme_transaction_id, payme_id) is not null;
+
+update public.payme_transactions
+set payme_transaction_id = coalesce(payme_transaction_id, external_transaction_id, payme_id)
+where payme_transaction_id is null
+  and coalesce(external_transaction_id, payme_id) is not null;
+
+update public.payme_transactions
+set payme_id = coalesce(payme_id, payme_transaction_id, external_transaction_id)
+where payme_id is null
+  and coalesce(payme_transaction_id, external_transaction_id) is not null;
+
 create index if not exists payme_transactions_payment_id_idx on public.payme_transactions (payment_id);
+create unique index if not exists payme_transactions_external_transaction_id_key
+  on public.payme_transactions (external_transaction_id)
+  where external_transaction_id is not null;
+create unique index if not exists payme_transactions_payme_transaction_id_key
+  on public.payme_transactions (payme_transaction_id)
+  where payme_transaction_id is not null;
+create unique index if not exists payme_transactions_payme_id_key
+  on public.payme_transactions (payme_id)
+  where payme_id is not null;
 create index if not exists payme_transactions_payme_time_idx on public.payme_transactions (payme_time);
 create index if not exists payme_transactions_state_idx on public.payme_transactions (state);
+
+do $$
+begin
+  if not exists (
+    select 1
+    from public.payments
+    where provider = 'payme'
+      and type = 'subscription'
+      and tier = 'premium'
+      and status = 'pending'
+    group by user_id
+    having count(*) > 1
+  ) then
+    execute 'create unique index if not exists payments_pending_payme_premium_monthly_key on public.payments (user_id) where provider = ''payme'' and type = ''subscription'' and tier = ''premium'' and status = ''pending''';
+  end if;
+end;
+$$;
 
 drop trigger if exists payme_transactions_set_updated_at on public.payme_transactions;
 create trigger payme_transactions_set_updated_at
@@ -221,6 +268,8 @@ begin
       payment_id,
       provider,
       external_transaction_id,
+      payme_transaction_id,
+      payme_id,
       external_receipt_id,
       account,
       amount_tiyin,
@@ -237,6 +286,8 @@ begin
     select
       payment_id,
       coalesce(provider, 'payme'),
+      external_transaction_id,
+      external_transaction_id,
       external_transaction_id,
       external_receipt_id,
       coalesce(account, '{}'::jsonb),

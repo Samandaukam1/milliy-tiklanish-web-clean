@@ -171,6 +171,8 @@ Legacy app compatibility still works if `payment_id` is present, but it is not r
 
 Expected: `state = 1`. If there is no pending `payments` row, the API creates one automatically. Repeating the same request must return the same `create_time`, `transaction`, and `state`.
 
+Important: `params.id` is the Payme transaction id. It is stored in `payme_transactions.payme_transaction_id`, `payme_transactions.payme_id`, and the legacy `external_transaction_id` column when those columns exist. Use the same `params.id` for `CheckTransaction`, `PerformTransaction`, and `CancelTransaction`.
+
 ### PerformTransaction
 
 ```json
@@ -290,9 +292,16 @@ Expected error: `-32504`.
 Duplicate new transaction for the same pending subscription payment:
 
 1. Call `CreateTransaction` with `payme_transaction_id=A`.
+2. Call `CreateTransaction` again with the same `payme_transaction_id=A`.
+
+Expected: the same `create_time`, `transaction`, and `state`.
+
+Account busy while another transaction is pending:
+
+1. Call `CreateTransaction` with `payme_transaction_id=A`.
 2. Call `CreateTransaction` again with `payme_transaction_id=B` for the same pending premium monthly account.
 
-Expected error: `-31008`.
+Expected error: `-31050` with `data = account`.
 
 Expired transaction:
 

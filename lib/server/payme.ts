@@ -37,8 +37,11 @@ export type PaymentRecord = {
 };
 
 export type PaymentTransactionRecord = {
+  id: string | null;
   payment_id: string;
   external_transaction_id: string;
+  payme_transaction_id: string;
+  payme_id: string;
   external_receipt_id: string | null;
   account: Record<string, unknown>;
   amount_tiyin: number;
@@ -119,6 +122,7 @@ const DEFAULT_VAT_PERCENT = 0;
 const PREMIUM_SUBSCRIPTION_DURATION_MS = 30 * 24 * 60 * 60 * 1000;
 const PAYME_TRANSACTION_TABLE = "payme_transactions";
 const LEGACY_PAYME_TRANSACTION_TABLE = "payment_transactions";
+const PAYME_TRANSACTION_ID_COLUMNS = ["payme_transaction_id", "payme_id", "external_transaction_id"] as const;
 const PAYMENT_LOG_TABLE = "payment_logs";
 const PAYME_CANCEL_REASON_TIMEOUT = 4;
 const DEFAULT_PAYME_MERCHANT_ID = "6a0aa667f424d415a5bc18da";
@@ -205,6 +209,10 @@ function isMissingSchemaError(errorText: string): boolean {
   return /relation .* does not exist|table .* does not exist|column .* does not exist|schema cache|could not find/i.test(errorText);
 }
 
+function isDuplicateKeyError(errorText: string): boolean {
+  return /duplicate key|23505/i.test(errorText);
+}
+
 function compareSecrets(left: string, right: string): boolean {
   const leftBuffer = Buffer.from(left, "utf8");
   const rightBuffer = Buffer.from(right, "utf8");
@@ -249,9 +257,17 @@ function normalizePaymentRecord(row: Record<string, unknown>): PaymentRecord {
 }
 
 function normalizePaymentTransactionRecord(row: Record<string, unknown>): PaymentTransactionRecord {
+  const externalTransactionId = asOptionalString(row.external_transaction_id);
+  const paymeTransactionId = asOptionalString(row.payme_transaction_id);
+  const paymeId = asOptionalString(row.payme_id);
+  const resolvedPaymeId = externalTransactionId ?? paymeTransactionId ?? paymeId ?? "";
+
   return {
+    id: asOptionalString(row.id),
     payment_id: String(row.payment_id ?? ""),
-    external_transaction_id: String(row.external_transaction_id ?? ""),
+    external_transaction_id: resolvedPaymeId,
+    payme_transaction_id: paymeTransactionId ?? resolvedPaymeId,
+    payme_id: paymeId ?? resolvedPaymeId,
     external_receipt_id: asOptionalString(row.external_receipt_id),
     account: asObject(row.account),
     amount_tiyin: asInteger(row.amount_tiyin),
@@ -515,6 +531,13 @@ export async function createPremiumMonthlyPayment(
     }
 
     lastErrorText = formatSupabaseError(error) || lastErrorText;
+    if (isDuplicateKeyError(lastErrorText)) {
+      const existingPayment = await getPendingPremiumMonthlyPayment(admin, input.userId);
+      if (existingPayment) {
+        return existingPayment;
+      }
+    }
+
     if (!isMissingSchemaError(lastErrorText)) {
       break;
     }
@@ -525,19 +548,25 @@ export async function createPremiumMonthlyPayment(
 
 export async function getPaymentTransactionByExternalId(admin: SupabaseClient, externalTransactionId: string): Promise<PaymentTransactionRecord | null> {
   for (const table of [PAYME_TRANSACTION_TABLE, LEGACY_PAYME_TRANSACTION_TABLE]) {
-    const { data, error } = await (admin.from(table) as any)
-      .select("*")
-      .eq("external_transaction_id", externalTransactionId)
-      .maybeSingle();
+    for (const column of PAYME_TRANSACTION_ID_COLUMNS) {
+      const { data, error } = await (admin.from(table) as any)
+        .select("*")
+        .eq(column, externalTransactionId)
+        .maybeSingle();
 
-    if (!error && data) {
-      return normalizePaymentTransactionRecord(data as Record<string, unknown>);
-    }
+      if (!error && data) {
+        return normalizePaymentTransactionRecord(data as Record<string, unknown>);
+      }
 
-    const errorText = formatSupabaseError(error);
-    if (error && !isMissingSchemaError(errorText)) {
-      console.warn("[payme] Failed to read transaction", { table, error: errorText });
-      return null;
+      const errorText = formatSupabaseError(error);
+      if (error && isMissingSchemaError(errorText)) {
+        continue;
+      }
+
+      if (error) {
+        console.warn("[payme] Failed to read transaction", { table, column, error: errorText });
+        return null;
+      }
     }
   }
 
@@ -586,28 +615,87 @@ export async function upsertPaymentTransaction(
   admin: SupabaseClient,
   transaction: PaymentTransactionRecord
 ) {
-  await (admin.from(PAYME_TRANSACTION_TABLE) as any).upsert(
-    {
-      payment_id: transaction.payment_id,
-      provider: "payme",
-      external_transaction_id: transaction.external_transaction_id,
-      external_receipt_id: transaction.external_receipt_id,
-      account: transaction.account,
-      amount_tiyin: transaction.amount_tiyin,
-      state: transaction.state,
-      reason: transaction.reason,
-      payme_time: transaction.payme_time,
-      create_time: transaction.create_time,
-      perform_time: transaction.perform_time,
-      cancel_time: transaction.cancel_time,
-      raw_request: transaction.raw_request,
-      updated_at: new Date().toISOString(),
-    },
-    {
-      onConflict: "external_transaction_id",
-      ignoreDuplicates: false,
+  const paymeTransactionId = transaction.external_transaction_id || transaction.payme_transaction_id || transaction.payme_id;
+  const basePayload: Record<string, unknown> = {
+    payment_id: transaction.payment_id,
+    provider: "payme",
+    external_receipt_id: transaction.external_receipt_id,
+    account: transaction.account,
+    amount_tiyin: transaction.amount_tiyin,
+    state: transaction.state,
+    reason: transaction.reason,
+    payme_time: transaction.payme_time,
+    create_time: transaction.create_time,
+    perform_time: transaction.perform_time,
+    cancel_time: transaction.cancel_time,
+    raw_request: transaction.raw_request,
+    updated_at: new Date().toISOString(),
+  };
+
+  const attempts = [
+    { lookup: "payme_transaction_id", columns: PAYME_TRANSACTION_ID_COLUMNS },
+    { lookup: "payme_transaction_id", columns: ["payme_transaction_id"] as const },
+    { lookup: "payme_id", columns: PAYME_TRANSACTION_ID_COLUMNS },
+    { lookup: "payme_id", columns: ["payme_id"] as const },
+    { lookup: "external_transaction_id", columns: PAYME_TRANSACTION_ID_COLUMNS },
+    { lookup: "external_transaction_id", columns: ["external_transaction_id"] as const },
+  ];
+
+  let lastErrorText = "";
+
+  for (const attempt of attempts) {
+    const payload = { ...basePayload };
+    for (const column of attempt.columns) {
+      payload[column] = paymeTransactionId;
     }
-  );
+
+    const { data, error } = await (admin.from(PAYME_TRANSACTION_TABLE) as any)
+      .update(payload)
+      .eq(attempt.lookup, paymeTransactionId)
+      .select("payment_id")
+      .limit(1);
+
+    if (!error && Array.isArray(data) && data.length > 0) {
+      return;
+    }
+
+    lastErrorText = formatSupabaseError(error) || lastErrorText;
+    if (error && !isMissingSchemaError(lastErrorText)) {
+      break;
+    }
+  }
+
+  for (const attempt of attempts) {
+    const payload = { ...basePayload };
+    for (const column of attempt.columns) {
+      payload[column] = paymeTransactionId;
+    }
+
+    const { error } = await (admin.from(PAYME_TRANSACTION_TABLE) as any).insert(payload);
+
+    if (!error) {
+      return;
+    }
+
+    lastErrorText = formatSupabaseError(error) || lastErrorText;
+    if (isDuplicateKeyError(lastErrorText)) {
+      const existing = await getPaymentTransactionByExternalId(admin, paymeTransactionId);
+      if (existing) {
+        await upsertPaymentTransaction(admin, {
+          ...transaction,
+          id: existing.id,
+          payment_id: existing.payment_id,
+        });
+        return;
+      }
+    }
+
+    if (!isMissingSchemaError(lastErrorText) && !isDuplicateKeyError(lastErrorText)) {
+      break;
+    }
+  }
+
+  throw new Error(lastErrorText || "payme_transaction_upsert_failed");
 }
 
 export async function logPaymentEvent(admin: SupabaseClient, input: PaymentLogInput): Promise<void> {
