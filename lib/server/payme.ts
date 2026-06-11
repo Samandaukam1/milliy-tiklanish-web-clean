@@ -6,6 +6,13 @@ import type { SubscriptionInfo, SubscriptionPlan } from "../types";
 
 export type PaymentType = "subscription" | "article";
 
+export type PremiumMonthlyPaymeAccount = {
+  userId: string;
+  subscriptionType: string;
+  subscriptionId: string;
+  rawAccount: Record<string, unknown>;
+};
+
 export type PaymentRecord = {
   id: string;
   provider: string | null;
@@ -99,6 +106,11 @@ const SUBSCRIPTION_AMOUNT_SUM: Record<Exclude<SubscriptionPlan, "free">, number>
   premium: 24000,
   pro: 89000,
 };
+
+export const PAYME_PREMIUM_MONTHLY_SUBSCRIPTION_TYPE = "premium_monthly";
+export const PAYME_PREMIUM_SUBSCRIPTION_ID = "premium";
+export const PAYME_PREMIUM_MONTHLY_AMOUNT_SUM = 24000;
+export const PAYME_PREMIUM_MONTHLY_AMOUNT_TIYIN = 2400000;
 
 const DEFAULT_SINGLE_ARTICLE_AMOUNT_SUM = 9900;
 const DEFAULT_RECEIPT_CODE = "10899004001000000";
@@ -297,6 +309,10 @@ export function resolvePaymentPricing(input: { type: PaymentType; tier?: string 
   };
 }
 
+export function getPremiumMonthlyPaymentDescription(): string {
+  return "Milliy Tiklanish Premium obunasi";
+}
+
 export function buildPaymentDescription(input: {
   type: PaymentType;
   tier?: string | null;
@@ -330,17 +346,24 @@ export function buildPaymeCheckoutUrl(input: {
 
   const fields: [string, string | number][] = [
     ["m", PAYME_MERCHANT_ID],
-    ["ac.payment_id", input.paymentId],
-    ["ac.user_id", input.userId],
-    ["ac.type", input.type],
     ["a", input.amountTiyin],
     ["c", input.returnUrl],
     ["ct", PAYME_TRANSACTION_TIMEOUT_MS],
     ["l", input.language?.trim() || "uz"],
   ];
 
-  if (input.tier) {
-    fields.push(["ac.tier", normalizeSubscriptionPlan(input.tier)]);
+  if (input.type === "subscription") {
+    fields.push(
+      ["ac.user_id", input.userId],
+      ["ac.subscription_type", PAYME_PREMIUM_MONTHLY_SUBSCRIPTION_TYPE],
+      ["ac.subscription_id", PAYME_PREMIUM_SUBSCRIPTION_ID]
+    );
+  } else {
+    fields.push(
+      ["ac.payment_id", input.paymentId],
+      ["ac.user_id", input.userId],
+      ["ac.type", input.type]
+    );
   }
 
   if (input.articleId) {
@@ -410,6 +433,87 @@ export async function getPaymentById(admin: SupabaseClient, paymentId: string): 
   }
 
   return normalizePaymentRecord(data as Record<string, unknown>);
+}
+
+export async function getPendingPremiumMonthlyPayment(
+  admin: SupabaseClient,
+  userId: string
+): Promise<PaymentRecord | null> {
+  const { data, error } = await (admin.from("payments") as any)
+    .select("*")
+    .eq("provider", "payme")
+    .eq("user_id", userId)
+    .eq("type", "subscription")
+    .eq("tier", PAYME_PREMIUM_SUBSCRIPTION_ID)
+    .eq("status", "pending")
+    .eq("amount_tiyin", PAYME_PREMIUM_MONTHLY_AMOUNT_TIYIN)
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (error || !data) {
+    return null;
+  }
+
+  return normalizePaymentRecord(data as Record<string, unknown>);
+}
+
+export async function createPremiumMonthlyPayment(
+  admin: SupabaseClient,
+  input: PremiumMonthlyPaymeAccount
+): Promise<PaymentRecord> {
+  const now = new Date().toISOString();
+  const metadata = {
+    user_id: input.userId,
+    type: "subscription",
+    plan: PAYME_PREMIUM_MONTHLY_SUBSCRIPTION_TYPE,
+    subscription_type: input.subscriptionType,
+    subscription_id: input.subscriptionId,
+    tier: PAYME_PREMIUM_SUBSCRIPTION_ID,
+    account: input.rawAccount,
+  };
+  const basePayload: Record<string, unknown> = {
+    provider: "payme",
+    user_id: input.userId,
+    type: "subscription",
+    plan: PAYME_PREMIUM_MONTHLY_SUBSCRIPTION_TYPE,
+    tier: PAYME_PREMIUM_SUBSCRIPTION_ID,
+    article_id: null,
+    amount: PAYME_PREMIUM_MONTHLY_AMOUNT_SUM,
+    amount_tiyin: PAYME_PREMIUM_MONTHLY_AMOUNT_TIYIN,
+    status: "pending",
+    description: getPremiumMonthlyPaymentDescription(),
+    account: input.rawAccount,
+    metadata,
+    created_at: now,
+    updated_at: now,
+  };
+
+  const payloadVariants = [
+    basePayload,
+    Object.fromEntries(Object.entries(basePayload).filter(([key]) => key !== "account")),
+    Object.fromEntries(Object.entries(basePayload).filter(([key]) => key !== "plan")),
+    Object.fromEntries(Object.entries(basePayload).filter(([key]) => key !== "account" && key !== "plan")),
+  ];
+
+  let lastErrorText = "";
+  for (const payload of payloadVariants) {
+    const { data, error } = await (admin.from("payments") as any)
+      .insert(payload)
+      .select("*")
+      .single();
+
+    if (!error && data) {
+      return normalizePaymentRecord(data as Record<string, unknown>);
+    }
+
+    lastErrorText = formatSupabaseError(error) || lastErrorText;
+    if (!isMissingSchemaError(lastErrorText)) {
+      break;
+    }
+  }
+
+  throw new Error(lastErrorText || "premium_monthly_payment_create_failed");
 }
 
 export async function getPaymentTransactionByExternalId(admin: SupabaseClient, externalTransactionId: string): Promise<PaymentTransactionRecord | null> {
@@ -544,6 +648,12 @@ function isInactiveUserRow(row: Record<string, unknown>): string | null {
   return null;
 }
 
+function addOneMonth(date: Date): Date {
+  const next = new Date(date);
+  next.setMonth(next.getMonth() + 1);
+  return next;
+}
+
 export async function getUserPaymentEligibility(admin: SupabaseClient, userId: string): Promise<UserPaymentEligibility> {
   for (const table of ["profiles", "users"] as const) {
     const { data, error } = await (admin.from(table) as any)
@@ -572,13 +682,28 @@ export async function getUserPaymentEligibility(admin: SupabaseClient, userId: s
 }
 
 export function validatePaymentAccount(payment: PaymentRecord, account: Record<string, unknown>) {
-  if (asOptionalString(account.payment_id) !== payment.id) {
+  const accountPaymentId = asOptionalString(account.payment_id);
+  if (accountPaymentId && accountPaymentId !== payment.id) {
     return "payment_id";
   }
 
   const accountUserId = asOptionalString(account.user_id);
+  if (!accountPaymentId && !accountUserId) {
+    return "user_id";
+  }
+
   if (accountUserId && accountUserId !== payment.user_id) {
     return "user_id";
+  }
+
+  const subscriptionType = asOptionalString(account.subscription_type);
+  if (payment.type === "subscription" && subscriptionType && subscriptionType !== PAYME_PREMIUM_MONTHLY_SUBSCRIPTION_TYPE) {
+    return "subscription_type";
+  }
+
+  const subscriptionId = asOptionalString(account.subscription_id);
+  if (payment.type === "subscription" && subscriptionId && subscriptionId !== PAYME_PREMIUM_SUBSCRIPTION_ID) {
+    return "subscription_id";
   }
 
   const accountType = asOptionalString(account.type);
@@ -703,6 +828,12 @@ async function updateUserSubscriptionColumns(
       patch,
       {
         subscription: patch.subscription,
+        subscription_starts_at: patch.subscription_starts_at,
+        subscription_expires_at: patch.subscription_expires_at,
+        updated_at: patch.updated_at,
+      },
+      {
+        subscription: patch.subscription,
         updated_at: patch.updated_at,
       },
     ];
@@ -731,12 +862,13 @@ export async function grantPaymentEntitlement(admin: SupabaseClient, payment: Pa
   if (payment.type === "subscription") {
     const plan = normalizeSubscriptionPlan(payment.tier);
     const startsAt = payment.paid_at ?? new Date().toISOString();
-    const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
+    const expiresAt = addOneMonth(new Date(startsAt)).toISOString();
 
     await updateUserSubscriptionColumns(admin, payment.user_id, {
       subscription: plan,
       subscription_starts_at: startsAt,
       subscription_expires_at: expiresAt,
+      premium_until: expiresAt,
       updated_at: new Date().toISOString(),
     });
 
@@ -782,6 +914,7 @@ export async function revokePaymentEntitlement(admin: SupabaseClient, payment: P
     await updateUserSubscriptionColumns(admin, payment.user_id, {
       subscription: "free",
       subscription_expires_at: now,
+      premium_until: now,
       updated_at: now,
     });
 

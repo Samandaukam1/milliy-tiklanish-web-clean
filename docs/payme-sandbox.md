@@ -58,7 +58,7 @@ Content-Type: application/json
 }
 ```
 
-Use the returned `payment_id` in Merchant API `account.payment_id`.
+The returned `payment_id` is used by the app result page. Payme Merchant API sandbox tests should use the provider account fields below instead of `account.payment_id`.
 
 Premium amount is `2400000` tiyin (`24 000 so'm`).
 
@@ -89,8 +89,9 @@ Suggested variables:
 
 ```text
 PAYME_TEST_KEY=<TEST_KEY from Payme cabinet>
-payment_id=<payment_id from /api/payme/create-payment>
 user_id=<existing_profiles_id>
+subscription_type=premium_monthly
+subscription_id=premium
 payme_transaction_id=payme-sandbox-{{$timestamp}}
 amount=2400000
 from={{$timestamp}}
@@ -109,10 +110,9 @@ to={{$timestamp}}
   "params": {
     "amount": 2400000,
     "account": {
-      "payment_id": "{{payment_id}}",
       "user_id": "{{user_id}}",
-      "type": "subscription",
-      "tier": "premium"
+      "subscription_type": "premium_monthly",
+      "subscription_id": "premium"
     }
   }
 }
@@ -120,11 +120,14 @@ to={{$timestamp}}
 
 Expected: `result.allow = true`, with `detail.items[0].title`, `price`, `count`, `code`, `package_code`, `vat_percent`.
 
-Minimal sandbox account also works:
+Legacy app compatibility still works if `payment_id` is present, but it is not required by the sandbox form:
 
 ```json
 {
-  "payment_id": "{{payment_id}}"
+  "payment_id": "<optional_existing_payment_id>",
+  "user_id": "{{user_id}}",
+  "subscription_type": "premium_monthly",
+  "subscription_id": "premium"
 }
 ```
 
@@ -140,16 +143,15 @@ Minimal sandbox account also works:
     "time": 1710000000000,
     "amount": 2400000,
     "account": {
-      "payment_id": "{{payment_id}}",
       "user_id": "{{user_id}}",
-      "type": "subscription",
-      "tier": "premium"
+      "subscription_type": "premium_monthly",
+      "subscription_id": "premium"
     }
   }
 }
 ```
 
-Expected: `state = 1`. Repeating the same request must return the same `create_time`, `transaction`, and `state`.
+Expected: `state = 1`. If there is no pending `payments` row, the API creates one automatically. Repeating the same request must return the same `create_time`, `transaction`, and `state`.
 
 ### PerformTransaction
 
@@ -164,7 +166,7 @@ Expected: `state = 1`. Repeating the same request must return the same `create_t
 }
 ```
 
-Expected: `state = 2`. The related profile gets `subscription = premium`, and `subscriptions` gets an active premium row.
+Expected: `state = 2`. The related profile gets `subscription = premium`, `premium_until = now + 1 month`, and `subscriptions` gets an active premium row.
 
 ### CheckTransaction
 
@@ -229,7 +231,9 @@ Invalid amount:
   "params": {
     "amount": 1,
     "account": {
-      "payment_id": "{{payment_id}}"
+      "user_id": "{{user_id}}",
+      "subscription_type": "premium_monthly",
+      "subscription_id": "premium"
     }
   }
 }
@@ -247,13 +251,15 @@ Invalid account:
   "params": {
     "amount": 2400000,
     "account": {
-      "payment_id": "00000000-0000-0000-0000-000000000000"
+      "user_id": "00000000-0000-0000-0000-000000000000",
+      "subscription_type": "premium_monthly",
+      "subscription_id": "premium"
     }
   }
 }
 ```
 
-Expected error: `-31050` with `data = payment_id`.
+Expected error: `-31050` with `data = user_id`.
 
 Invalid authorization:
 
@@ -263,10 +269,10 @@ Authorization: Basic <wrong-token>
 
 Expected error: `-32504`.
 
-Duplicate new transaction for the same pending payment:
+Duplicate new transaction for the same pending subscription payment:
 
 1. Call `CreateTransaction` with `payme_transaction_id=A`.
-2. Call `CreateTransaction` again with `payme_transaction_id=B` for the same `payment_id`.
+2. Call `CreateTransaction` again with `payme_transaction_id=B` for the same pending premium monthly account.
 
 Expected error: `-31008`.
 
@@ -283,10 +289,13 @@ Expected error: `-31008`; local transaction becomes `state = -1`, `reason = 4`.
 1. Deploy the API to Vercel.
 2. Set `PAYME_TEST_MODE=true`, `PAYME_MERCHANT_ID`, `PAYME_TEST_KEY`, `SUPABASE_URL`, and `SUPABASE_SERVICE_ROLE_KEY` in Vercel.
 3. Run [supabase-payme.sql](../supabase-payme.sql).
-4. Create a real pending payment from the app or `/api/payme/create-payment`.
+4. Create a real pending payment from the app or let `CreateTransaction` create it automatically.
 5. Open `https://test.paycom.uz`.
 6. Enter Merchant ID, TEST_KEY, and endpoint URL.
-7. Use one-time account mode and pass `payment_id` as the account field.
+7. Use these account fields:
+   - `user_id`: real `profiles.id`
+   - `subscription_type`: `premium_monthly`
+   - `subscription_id`: `premium`
 8. Run both sandbox scenarios:
    - create and cancel an unconfirmed transaction
    - create, perform, check, and cancel a performed transaction

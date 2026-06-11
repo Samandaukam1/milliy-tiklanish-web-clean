@@ -305,7 +305,7 @@ export async function fetchUserLikedMediaVideoIds(videoIds: string[], userId: st
   }
 
   try {
-    const result = await runWithMediaVideoColumn<any[]>("media_video_likes", (column) =>
+    const result = await runWithMediaVideoColumn<any[]>("media_video_likes", async (column) =>
       supabase
         .from("media_video_likes")
         .select(column)
@@ -329,7 +329,7 @@ export async function setMediaVideoLike(videoId: string, userId: string, shouldL
   }
 
   try {
-    const result = await runWithMediaVideoColumn<unknown>("media_video_likes", (column) =>
+    const result = await runWithMediaVideoColumn<unknown>("media_video_likes", async (column) =>
       shouldLike
         ? supabase.from("media_video_likes").insert({ user_id: userId, [column]: videoId })
         : supabase.from("media_video_likes").delete().eq("user_id", userId).eq(column, videoId)
@@ -352,7 +352,7 @@ export async function recordMediaVideoShare(videoId: string, userId: string): Pr
   }
 
   try {
-    const result = await runWithMediaVideoColumn<unknown>("media_video_shares", (column) =>
+    const result = await runWithMediaVideoColumn<unknown>("media_video_shares", async (column) =>
       supabase.from("media_video_shares").insert({ user_id: userId, [column]: videoId })
     );
 
@@ -386,7 +386,7 @@ export async function fetchMediaVideoComments(videoId: string): Promise<AppMedia
   }
 
   try {
-    const result = await runWithMediaVideoColumn<any[]>("media_video_comments", (column) =>
+    const result = await runWithMediaVideoColumn<any[]>("media_video_comments", async (column) =>
       supabase
         .from("media_video_comments")
         .select("id, user_id, author_name, content, created_at, video_id, media_video_id")
@@ -422,7 +422,7 @@ export async function addMediaVideoComment(
   }
 
   try {
-    const result = await runWithMediaVideoColumn<Record<string, string>>("media_video_comments", (column) =>
+    const result = await runWithMediaVideoColumn<Record<string, string>>("media_video_comments", async (column) =>
       supabase
         .from("media_video_comments")
         .insert({ user_id: userId, author_name: authorName, content: content.trim(), [column]: videoId })

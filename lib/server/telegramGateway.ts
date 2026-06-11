@@ -743,7 +743,7 @@ async function createOrUpdateProfile(admin: SupabaseClient, profileId: string, p
     throw new TelegramGatewayError(500, "Profilni yangilab bo'lmadi");
   }
 
-  return sanitizeProfile(result.data as PrivateProfileRow);
+  return sanitizeProfile(result.data as unknown as PrivateProfileRow);
 }
 
 function getVerificationFailure(status: string) {
@@ -1059,10 +1059,10 @@ export async function registerWithVerifiedPhone(input: RegisterAccountInput): Pr
 
   await updateVerificationSession(admin, session.id, {
     status: "completed",
-    profile_id: (inserted.data as PrivateProfileRow).id,
+    profile_id: (inserted.data as unknown as PrivateProfileRow).id,
   });
 
-  return sanitizeProfile(inserted.data as PrivateProfileRow);
+  return sanitizeProfile(inserted.data as unknown as PrivateProfileRow);
 }
 
 export async function loginWithPassword(loginInput: unknown, passwordInput: unknown): Promise<UserProfile> {

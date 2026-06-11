@@ -16,6 +16,7 @@ create table if not exists public.payments (
   provider text not null default 'payme',
   user_id text not null,
   type text not null check (type in ('subscription', 'article')),
+  plan text,
   tier text,
   article_id text,
   amount numeric(12, 2) not null,
@@ -24,6 +25,7 @@ create table if not exists public.payments (
   description text,
   return_url text,
   checkout_url text,
+  account jsonb not null default '{}'::jsonb,
   metadata jsonb not null default '{}'::jsonb,
   click_trans_id text,
   click_paydoc_id text,
@@ -39,10 +41,12 @@ create table if not exists public.payments (
 alter table if exists public.payments
   alter column article_id type text using article_id::text;
 alter table public.payments add column if not exists provider text not null default 'payme';
+alter table public.payments add column if not exists plan text;
 alter table public.payments add column if not exists amount_tiyin bigint;
 alter table public.payments add column if not exists description text;
 alter table public.payments add column if not exists return_url text;
 alter table public.payments add column if not exists checkout_url text;
+alter table public.payments add column if not exists account jsonb not null default '{}'::jsonb;
 alter table public.payments add column if not exists metadata jsonb not null default '{}'::jsonb;
 alter table public.payments add column if not exists external_transaction_id text;
 alter table public.payments add column if not exists external_receipt_id text;
@@ -153,11 +157,13 @@ for each row execute function public.set_updated_at();
 alter table if exists public.profiles add column if not exists subscription text not null default 'free';
 alter table if exists public.profiles add column if not exists subscription_starts_at timestamptz;
 alter table if exists public.profiles add column if not exists subscription_expires_at timestamptz;
+alter table if exists public.profiles add column if not exists premium_until timestamptz;
 alter table if exists public.profiles add column if not exists updated_at timestamptz not null default now();
 
 alter table if exists public.users add column if not exists subscription text not null default 'free';
 alter table if exists public.users add column if not exists subscription_starts_at timestamptz;
 alter table if exists public.users add column if not exists subscription_expires_at timestamptz;
+alter table if exists public.users add column if not exists premium_until timestamptz;
 alter table if exists public.users add column if not exists updated_at timestamptz not null default now();
 
 -- Optional compatibility: migrate old payment_transactions rows if that table exists.

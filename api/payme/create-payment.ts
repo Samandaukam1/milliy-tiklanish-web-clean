@@ -1,9 +1,12 @@
 import {
   buildPaymeCheckoutUrl,
   buildPaymentDescription,
+  createPremiumMonthlyPayment,
   createPaymentsAdminClient,
   isPaymeCheckoutConfigured,
   isSupabasePaymentServerConfigured,
+  PAYME_PREMIUM_MONTHLY_SUBSCRIPTION_TYPE,
+  PAYME_PREMIUM_SUBSCRIPTION_ID,
   resolvePaymentPricing,
   type PaymentType,
 } from "../../lib/server/payme";
@@ -108,52 +111,80 @@ export default async function handler(req: ServerlessRequest, res: ServerlessRes
       return;
     }
 
-    const pricing = resolvePaymentPricing({ type, tier: body.tier });
-    const description = buildPaymentDescription({ type, tier: pricing.tier, articleId });
     const admin = createPaymentsAdminClient();
+    const pricing = resolvePaymentPricing({ type, tier: body.tier });
+    let paymentId: string;
+    let returnTier = pricing.tier;
+    let returnArticleId = articleId;
 
-    const { data, error } = await (admin.from("payments") as any)
-      .insert({
-        provider: "payme",
+    if (type === "subscription") {
+      if (pricing.tier !== PAYME_PREMIUM_SUBSCRIPTION_ID) {
+        sendJson(res, 400, { error: "Unsupported subscription tier" });
+        return;
+      }
+
+      const account = {
         user_id: userId,
-        type,
-        tier: pricing.tier,
-        article_id: articleId,
-        amount: pricing.amount_sum,
-        amount_tiyin: pricing.amount_tiyin,
-        status: "pending",
-        description,
-        metadata: {
+        subscription_type: PAYME_PREMIUM_MONTHLY_SUBSCRIPTION_TYPE,
+        subscription_id: PAYME_PREMIUM_SUBSCRIPTION_ID,
+      };
+      const payment = await createPremiumMonthlyPayment(admin, {
+        userId,
+        subscriptionType: PAYME_PREMIUM_MONTHLY_SUBSCRIPTION_TYPE,
+        subscriptionId: PAYME_PREMIUM_SUBSCRIPTION_ID,
+        rawAccount: account,
+      });
+
+      paymentId = payment.id;
+      returnTier = PAYME_PREMIUM_SUBSCRIPTION_ID;
+      returnArticleId = null;
+    } else {
+      const description = buildPaymentDescription({ type, tier: pricing.tier, articleId });
+
+      const { data, error } = await (admin.from("payments") as any)
+        .insert({
+          provider: "payme",
           user_id: userId,
           type,
           tier: pricing.tier,
           article_id: articleId,
-        },
-      })
-      .select("id, type, tier, article_id")
-      .single();
+          amount: pricing.amount_sum,
+          amount_tiyin: pricing.amount_tiyin,
+          status: "pending",
+          description,
+          metadata: {
+            user_id: userId,
+            type,
+            tier: pricing.tier,
+            article_id: articleId,
+          },
+        })
+        .select("id, type, tier, article_id")
+        .single();
 
-    if (error || !data) {
-      console.error("[Payme create-payment] DB insert error:", error);
-      sendJson(res, 500, { error: "Failed to create payment record" });
-      return;
+      if (error || !data) {
+        console.error("[Payme create-payment] DB insert error:", error);
+        sendJson(res, 500, { error: "Failed to create payment record" });
+        return;
+      }
+
+      paymentId = String(data.id);
     }
 
-    const paymentId = String(data.id);
     const returnUrl = appendQueryParams(returnUrlBase, {
       payment_id: paymentId,
       provider: "payme",
       type,
-      tier: pricing.tier,
-      article_id: articleId,
+      tier: returnTier,
+      article_id: returnArticleId,
     });
 
     const paymentUrl = buildPaymeCheckoutUrl({
       paymentId,
       userId,
       type,
-      tier: pricing.tier,
-      articleId,
+      tier: returnTier,
+      articleId: returnArticleId,
       amountTiyin: pricing.amount_tiyin,
       returnUrl,
       language: body.language,
@@ -172,8 +203,8 @@ export default async function handler(req: ServerlessRequest, res: ServerlessRes
       payment_id: paymentId,
       provider: "payme",
       type,
-      tier: pricing.tier,
-      article_id: articleId,
+      tier: returnTier,
+      article_id: returnArticleId,
     });
   } catch (error) {
     console.error("[Payme create-payment] unhandled error:", error);

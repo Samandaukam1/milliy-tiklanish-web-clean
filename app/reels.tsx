@@ -1753,7 +1753,7 @@ const styles = StyleSheet.create({
     transitionProperty: "transform, opacity",
     transitionDuration: "220ms",
     transitionTimingFunction: "ease",
-  },
+  } as any,
   desktopActionItemHovered: {
     transform: [{ scale: 1.06 }],
   },

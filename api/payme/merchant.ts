@@ -1,11 +1,14 @@
 import {
   buildPaymeReceiptDetail,
+  createPremiumMonthlyPayment,
   createPaymentsAdminClient,
   expirePaymentTransaction,
+  getPendingPremiumMonthlyPayment,
   getPaymentById,
   getPaymentTransactionByExternalId,
   getPaymentTransactionByPaymentId,
   getPaymentTransactionsForStatement,
+  getPremiumMonthlyPaymentDescription,
   getUserPaymentEligibility,
   grantPaymentEntitlement,
   isPaymeMerchantConfigured,
@@ -15,6 +18,10 @@ import {
   markPaymentCancelled,
   markPaymentPaid,
   PAYME_ERROR,
+  PAYME_PREMIUM_MONTHLY_AMOUNT_SUM,
+  PAYME_PREMIUM_MONTHLY_AMOUNT_TIYIN,
+  PAYME_PREMIUM_MONTHLY_SUBSCRIPTION_TYPE,
+  PAYME_PREMIUM_SUBSCRIPTION_ID,
   PAYME_STATE,
   revokePaymentEntitlement,
   upsertPaymentTransaction,
@@ -71,6 +78,13 @@ type ResponseMeta = {
   paymentId?: string | null;
   externalTransactionId?: string | null;
   state?: number | null;
+};
+
+type PremiumMonthlyAccount = {
+  userId: string;
+  subscriptionType: string;
+  subscriptionId: string;
+  rawAccount: Record<string, unknown>;
 };
 
 function asObject(value: unknown): Record<string, unknown> {
@@ -196,6 +210,36 @@ function transactionNotFoundError(id: PaymeRpcId): PaymeRpcResponseBody {
   );
 }
 
+function buildPremiumMonthlyPreviewPayment(account: PremiumMonthlyAccount): PaymentRecord {
+  return {
+    id: "",
+    provider: "payme",
+    user_id: account.userId,
+    type: "subscription",
+    tier: PAYME_PREMIUM_SUBSCRIPTION_ID,
+    article_id: null,
+    amount: PAYME_PREMIUM_MONTHLY_AMOUNT_SUM,
+    amount_tiyin: PAYME_PREMIUM_MONTHLY_AMOUNT_TIYIN,
+    status: "pending",
+    description: getPremiumMonthlyPaymentDescription(),
+    return_url: null,
+    checkout_url: null,
+    metadata: {
+      plan: PAYME_PREMIUM_MONTHLY_SUBSCRIPTION_TYPE,
+      subscription_type: account.subscriptionType,
+      subscription_id: account.subscriptionId,
+      account: account.rawAccount,
+    },
+    external_transaction_id: null,
+    external_receipt_id: null,
+    paid_at: null,
+    cancelled_at: null,
+    cancel_reason: null,
+    created_at: null,
+    updated_at: null,
+  };
+}
+
 function getResponseState(body: PaymeRpcResponseBody, fallback?: number | null): number | null {
   const state = body.result?.state;
   return typeof state === "number" ? state : fallback ?? null;
@@ -310,6 +354,46 @@ async function validatePaymentForPayme(
   return null;
 }
 
+async function validatePremiumMonthlyAccount(
+  admin: SupabaseClient,
+  payload: PaymeMerchantRequest,
+  account: Record<string, unknown>,
+  amountTiyin: number
+): Promise<{ account: PremiumMonthlyAccount } | { error: PaymeRpcResponseBody }> {
+  const userId = asString(account.user_id);
+  if (!userId) {
+    return { error: accountValidationError(payload.id, "user_id") };
+  }
+
+  const subscriptionType = asString(account.subscription_type);
+  if (subscriptionType !== PAYME_PREMIUM_MONTHLY_SUBSCRIPTION_TYPE) {
+    return { error: accountValidationError(payload.id, "subscription_type") };
+  }
+
+  const subscriptionId = asString(account.subscription_id);
+  if (subscriptionId !== PAYME_PREMIUM_SUBSCRIPTION_ID) {
+    return { error: accountValidationError(payload.id, "subscription_id") };
+  }
+
+  if (amountTiyin !== PAYME_PREMIUM_MONTHLY_AMOUNT_TIYIN) {
+    return { error: invalidAmountError(payload.id) };
+  }
+
+  const eligibility = await getUserPaymentEligibility(admin, userId);
+  if (!eligibility.exists || !eligibility.active) {
+    return { error: accountValidationError(payload.id, eligibility.data ?? "user_id") };
+  }
+
+  return {
+    account: {
+      userId,
+      subscriptionType,
+      subscriptionId,
+      rawAccount: account,
+    },
+  };
+}
+
 async function handleCheckPerformTransaction(
   admin: SupabaseClient,
   payload: PaymeMerchantRequest
@@ -320,14 +404,40 @@ async function handleCheckPerformTransaction(
   const paymentId = asString(account.payment_id);
   const payment = paymentId ? await getPaymentById(admin, paymentId) : null;
 
-  if (!payment) {
+  if (paymentId && !payment) {
     return buildRpcResponse(admin, payload, accountValidationError(payload.id, "payment_id"), { paymentId });
   }
 
-  const validationError = await validatePaymentForPayme(admin, payload, payment, account, amountTiyin);
-  if (validationError) {
-    return buildRpcResponse(admin, payload, validationError, { paymentId: payment.id });
+  if (payment) {
+    const validationError = await validatePaymentForPayme(admin, payload, payment, account, amountTiyin);
+    if (validationError) {
+      return buildRpcResponse(admin, payload, validationError, { paymentId: payment.id });
+    }
+
+    return buildRpcResponse(
+      admin,
+      payload,
+      successBody(payload.id, {
+        allow: true,
+        additional: {
+          payment_id: payment.id,
+          user_id: payment.user_id,
+          type: payment.type,
+          tier: payment.tier,
+          subscription_type: PAYME_PREMIUM_MONTHLY_SUBSCRIPTION_TYPE,
+          subscription_id: PAYME_PREMIUM_SUBSCRIPTION_ID,
+        },
+        detail: buildPaymeReceiptDetail(payment),
+      }),
+      { paymentId: payment.id }
+    );
   }
+
+  const validation = await validatePremiumMonthlyAccount(admin, payload, account, amountTiyin);
+  if ("error" in validation) {
+    return buildRpcResponse(admin, payload, validation.error, { paymentId: null });
+  }
+  const previewPayment = buildPremiumMonthlyPreviewPayment(validation.account);
 
   return buildRpcResponse(
     admin,
@@ -335,14 +445,14 @@ async function handleCheckPerformTransaction(
     successBody(payload.id, {
       allow: true,
       additional: {
-        payment_id: payment.id,
-        user_id: payment.user_id,
-        type: payment.type,
-        tier: payment.tier,
+        user_id: validation.account.userId,
+        type: "subscription",
+        tier: PAYME_PREMIUM_SUBSCRIPTION_ID,
+        subscription_type: validation.account.subscriptionType,
+        subscription_id: validation.account.subscriptionId,
       },
-      detail: buildPaymeReceiptDetail(payment),
-    }),
-    { paymentId: payment.id }
+      detail: buildPaymeReceiptDetail(previewPayment),
+    })
   );
 }
 
@@ -356,17 +466,9 @@ async function handleCreateTransaction(
   const amountTiyin = asNumber(params.amount);
   const account = asObject(params.account);
   const paymentId = asString(account.payment_id);
-  const payment = paymentId ? await getPaymentById(admin, paymentId) : null;
 
   if (!externalTransactionId) {
     return buildRpcResponse(admin, payload, transactionNotFoundError(payload.id), { paymentId });
-  }
-
-  if (!payment) {
-    return buildRpcResponse(admin, payload, accountValidationError(payload.id, "payment_id"), {
-      paymentId,
-      externalTransactionId,
-    });
   }
 
   const existingByExternal = await getPaymentTransactionByExternalId(admin, externalTransactionId);
@@ -393,6 +495,29 @@ async function handleCreateTransaction(
       externalTransactionId,
       state: existingByExternal.state,
     });
+  }
+
+  let payment = paymentId ? await getPaymentById(admin, paymentId) : null;
+  let premiumAccount: PremiumMonthlyAccount | null = null;
+
+  if (paymentId && !payment) {
+    return buildRpcResponse(admin, payload, accountValidationError(payload.id, "payment_id"), {
+      paymentId,
+      externalTransactionId,
+    });
+  }
+
+  if (!payment) {
+    const validation = await validatePremiumMonthlyAccount(admin, payload, account, amountTiyin);
+    if ("error" in validation) {
+      return buildRpcResponse(admin, payload, validation.error, { externalTransactionId });
+    }
+
+    premiumAccount = validation.account;
+    payment = await getPendingPremiumMonthlyPayment(admin, premiumAccount.userId);
+    if (!payment) {
+      payment = await createPremiumMonthlyPayment(admin, premiumAccount);
+    }
   }
 
   const validationError = await validatePaymentForPayme(admin, payload, payment, account, amountTiyin);
