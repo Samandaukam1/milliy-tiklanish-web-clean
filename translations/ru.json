@@ -1,0 +1,88 @@
+{
+  "tabs": {
+    "home": "Главная",
+    "articles": "Статьи",
+    "radio": "Радио",
+    "media": "Медиа",
+    "profile": "Профиль"
+  },
+  "profile": {
+    "freeSubscription": "БЕСПЛАТНАЯ ПОДПИСКА",
+    "premium": "ПРЕМИУМ",
+    "vip": "ВИП КЛУБ",
+    "read": "Прочитано",
+    "listened": "Мин. прослушивания",
+    "saved": "Сохранено",
+    "upgradeTitle": "MILLIY TIKLANISH+",
+    "upgradeSubtitle": "Перейти на Премиум",
+    "upgradeDesc": "Чтение без рекламы, ВИП статьи и аудио версии",
+    "subscribe": "Подписаться",
+    "settings": "Настройки",
+    "language": "Язык",
+    "theme": "Тема",
+    "light": "Светлая",
+    "dark": "Темная",
+    "notifications": "Уведомления",
+    "downloads": "Загрузки",
+    "share": "Поделиться",
+    "privacy": "Конфиденциальность",
+    "about": "О нас"
+  },
+  "languageNames": {
+    "uz": "Узбекский (Латиница)",
+    "uz_cy": "Узбекский (Кириллица)",
+    "ru": "Русский",
+    "en": "Английский"
+  },
+  "article": {
+    "readTime": "мин",
+    "readTimeFull": "мин чтения",
+    "by": "от",
+    "published": "Опубликовано",
+    "save": "Сохранить",
+    "share": "Поделиться",
+    "listen": "Слушать",
+    "author": "Автор"
+  },
+  "common": {
+    "loading": "Загрузка...",
+    "error": "Ошибка",
+    "retry": "Повторить",
+    "noData": "Нет данных",
+    "search": "Поиск",
+    "cancel": "Отмена",
+    "ok": "OK",
+    "selectLanguage": "Выберите язык",
+    "back": "Назад"
+  },
+  "premium": {
+    "subscribe": "Подпишитесь на Premium",
+    "subscribeCta": "Подписаться",
+    "buySingle": "Купить только эту статью",
+    "buyBtn": "Купить",
+    "lockedTitle": "Премиум статья",
+    "lockedDesc": "Эта статья доступна только для premium подписчиков.",
+    "hint": "29 000 сум / мес · Отменить в любое время"
+  },
+  "editorial": {
+    "title": "О редакции",
+    "btn": "О редакции"
+  },
+  "issue": {
+    "label": "Выпуск газеты",
+    "toc": "Содержание",
+    "pdf": "Скачать PDF",
+    "read": "Читать",
+    "currentIssue": "Текущий выпуск",
+    "archive": "Архив статей",
+    "allIssues": "Все выпуски"
+  },
+  "authors": {
+    "topTitle": "Самые читаемые авторы",
+    "seeAll": "Все",
+    "articles": "статей"
+  },
+  "social": {
+    "followUs": "Следите за нами"
+  }
+}

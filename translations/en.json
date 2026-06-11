@@ -1,0 +1,88 @@
+{
+  "tabs": {
+    "home": "Home",
+    "articles": "Articles",
+    "radio": "Radio",
+    "media": "Media",
+    "profile": "Profile"
+  },
+  "profile": {
+    "freeSubscription": "FREE SUBSCRIPTION",
+    "premium": "PREMIUM",
+    "vip": "VIP CLUB",
+    "read": "Read",
+    "listened": "Listening min.",
+    "saved": "Saved",
+    "upgradeTitle": "MILLIY TIKLANISH+",
+    "upgradeSubtitle": "Upgrade to Premium",
+    "upgradeDesc": "Ad-free reading, VIP articles and audio versions",
+    "subscribe": "Subscribe",
+    "settings": "Settings",
+    "language": "Language",
+    "theme": "Theme",
+    "light": "Light",
+    "dark": "Dark",
+    "notifications": "Notifications",
+    "downloads": "Downloads",
+    "share": "Share",
+    "privacy": "Privacy",
+    "about": "About"
+  },
+  "languageNames": {
+    "uz": "Uzbek (Latin)",
+    "uz_cy": "Uzbek (Cyrillic)",
+    "ru": "Russian",
+    "en": "English"
+  },
+  "article": {
+    "readTime": "min",
+    "readTimeFull": "min read",
+    "by": "by",
+    "published": "Published",
+    "save": "Save",
+    "share": "Share",
+    "listen": "Listen",
+    "author": "Author"
+  },
+  "common": {
+    "loading": "Loading...",
+    "error": "Error",
+    "retry": "Retry",
+    "noData": "No data",
+    "search": "Search",
+    "cancel": "Cancel",
+    "ok": "OK",
+    "selectLanguage": "Select language",
+    "back": "Back"
+  },
+  "premium": {
+    "subscribe": "Subscribe to Premium",
+    "subscribeCta": "Subscribe",
+    "buySingle": "Buy this article only",
+    "buyBtn": "Buy",
+    "lockedTitle": "Premium Article",
+    "lockedDesc": "This article is available to premium subscribers only.",
+    "hint": "29,000 UZS / month · Cancel anytime"
+  },
+  "editorial": {
+    "title": "About Editorial",
+    "btn": "About Editorial"
+  },
+  "issue": {
+    "label": "Newspaper Issue",
+    "toc": "Table of Contents",
+    "pdf": "Download PDF",
+    "read": "Read",
+    "currentIssue": "Current Issue",
+    "archive": "Article Archive",
+    "allIssues": "All Issues"
+  },
+  "authors": {
+    "topTitle": "Most Read Authors",
+    "seeAll": "See All",
+    "articles": "articles"
+  },
+  "social": {
+    "followUs": "Follow Us"
+  }
+}
