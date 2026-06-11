@@ -114,8 +114,9 @@ export const PAYME_PREMIUM_MONTHLY_AMOUNT_TIYIN = 2400000;
 
 const DEFAULT_SINGLE_ARTICLE_AMOUNT_SUM = 9900;
 const DEFAULT_RECEIPT_CODE = "10899004001000000";
-const DEFAULT_PACKAGE_CODE = "123456";
-const DEFAULT_VAT_PERCENT = 12;
+const DEFAULT_PACKAGE_CODE = "121";
+const DEFAULT_VAT_PERCENT = 0;
+const PREMIUM_SUBSCRIPTION_DURATION_MS = 30 * 24 * 60 * 60 * 1000;
 const PAYME_TRANSACTION_TABLE = "payme_transactions";
 const LEGACY_PAYME_TRANSACTION_TABLE = "payment_transactions";
 const PAYMENT_LOG_TABLE = "payment_logs";
@@ -131,10 +132,11 @@ function isEnabledEnv(value: string | undefined): boolean {
 const PAYME_TEST_MODE = isEnabledEnv(process.env.PAYME_TEST_MODE);
 const PAYME_MERCHANT_ID = process.env.PAYME_MERCHANT_ID?.trim() || DEFAULT_PAYME_MERCHANT_ID;
 
-// In sandbox mode we intentionally do not fall back to PAYME_KEY, so a
-// production key cannot be accepted by the sandbox merchant endpoint.
-const _paymeProductionKey = process.env.PAYME_KEY?.trim() ?? "";
-const _paymeTestKey = process.env.PAYME_TEST_KEY?.trim() ?? "";
+// PAYME_SECRET_KEY is the preferred generic merchant secret. In sandbox mode
+// PAYME_KEY is intentionally ignored so a production key is not accepted there.
+const _paymeSecretKey = process.env.PAYME_SECRET_KEY?.trim() ?? "";
+const _paymeProductionKey = _paymeSecretKey || process.env.PAYME_KEY?.trim() || "";
+const _paymeTestKey = process.env.PAYME_TEST_KEY?.trim() || _paymeSecretKey;
 const _paymeLegacyKey = process.env.PAYME_MERCHANT_KEY?.trim() ?? "";
 const PAYME_MERCHANT_KEY = PAYME_TEST_MODE
   ? _paymeTestKey
@@ -150,7 +152,7 @@ const PAYME_CHECKOUT_BASE_URL = (
 
 const PAYME_RECEIPT_CODE = process.env.PAYME_MXIK_CODE?.trim() || DEFAULT_RECEIPT_CODE;
 const PAYME_RECEIPT_PACKAGE_CODE = process.env.PAYME_PACKAGE_CODE?.trim() || DEFAULT_PACKAGE_CODE;
-const PAYME_RECEIPT_VAT_PERCENT = normalizePositiveInteger(process.env.PAYME_VAT_PERCENT, DEFAULT_VAT_PERCENT);
+const PAYME_RECEIPT_VAT_PERCENT = normalizeNonNegativeInteger(process.env.PAYME_VAT_PERCENT, DEFAULT_VAT_PERCENT);
 const SINGLE_ARTICLE_AMOUNT_SUM = normalizePositiveInteger(process.env.PAYME_SINGLE_ARTICLE_AMOUNT_SUM, DEFAULT_SINGLE_ARTICLE_AMOUNT_SUM);
 const SUPABASE_URL = process.env.SUPABASE_URL ?? process.env.EXPO_PUBLIC_SUPABASE_URL ?? "";
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY ?? "";
@@ -158,6 +160,11 @@ const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY ?? "";
 function normalizePositiveInteger(value: string | undefined, fallback: number): number {
   const parsed = Number.parseInt((value ?? "").trim(), 10);
   return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+}
+
+function normalizeNonNegativeInteger(value: string | undefined, fallback: number): number {
+  const parsed = Number.parseInt((value ?? "").trim(), 10);
+  return Number.isFinite(parsed) && parsed >= 0 ? parsed : fallback;
 }
 
 function asOptionalString(value: unknown): string | null {
@@ -648,37 +655,32 @@ function isInactiveUserRow(row: Record<string, unknown>): string | null {
   return null;
 }
 
-function addOneMonth(date: Date): Date {
-  const next = new Date(date);
-  next.setMonth(next.getMonth() + 1);
-  return next;
+function addPremiumSubscriptionDuration(date: Date): Date {
+  return new Date(date.getTime() + PREMIUM_SUBSCRIPTION_DURATION_MS);
 }
 
 export async function getUserPaymentEligibility(admin: SupabaseClient, userId: string): Promise<UserPaymentEligibility> {
-  for (const table of ["profiles", "users"] as const) {
-    const { data, error } = await (admin.from(table) as any)
-      .select("*")
-      .eq("id", userId)
-      .maybeSingle();
+  const { data, error } = await (admin.from("profiles") as any)
+    .select("*")
+    .eq("id", userId)
+    .maybeSingle();
 
-    if (!error && data) {
-      const inactiveField = isInactiveUserRow(data as Record<string, unknown>);
-      return {
-        exists: true,
-        active: !inactiveField,
-        table,
-        data: inactiveField ?? undefined,
-      };
-    }
-
-    const errorText = formatSupabaseError(error);
-    if (error && !isMissingSchemaError(errorText)) {
-      console.warn("[payme] Failed to check user eligibility", { table, error: errorText });
-      return { exists: false, active: false, table, data: "user_id" };
-    }
+  if (!error && data) {
+    const inactiveField = isInactiveUserRow(data as Record<string, unknown>);
+    return {
+      exists: true,
+      active: !inactiveField,
+      table: "profiles",
+      data: inactiveField ?? undefined,
+    };
   }
 
-  return { exists: false, active: false, table: null, data: "user_id" };
+  const errorText = formatSupabaseError(error);
+  if (error && !isMissingSchemaError(errorText)) {
+    console.warn("[payme] Failed to check profile eligibility", { error: errorText });
+  }
+
+  return { exists: false, active: false, table: "profiles", data: "user_id" };
 }
 
 export function validatePaymentAccount(payment: PaymentRecord, account: Record<string, unknown>) {
@@ -728,22 +730,25 @@ export function validatePaymentAccount(payment: PaymentRecord, account: Record<s
 }
 
 export function buildPaymeReceiptDetail(payment: PaymentRecord) {
-  const title = payment.description || buildPaymentDescription({
-    type: payment.type,
-    tier: payment.tier,
-    articleId: payment.article_id,
-  });
+  const isPremiumMonthly = payment.type === "subscription" && normalizeSubscriptionPlan(payment.tier) === "premium";
+  const title = isPremiumMonthly
+    ? "Milliy Tiklanish Premium"
+    : payment.description || buildPaymentDescription({
+      type: payment.type,
+      tier: payment.tier,
+      articleId: payment.article_id,
+    });
 
   return {
     receipt_type: 0,
     items: [
       {
         title,
-        price: payment.amount_tiyin,
+        price: isPremiumMonthly ? PAYME_PREMIUM_MONTHLY_AMOUNT_TIYIN : payment.amount_tiyin,
         count: 1,
-        code: PAYME_RECEIPT_CODE,
-        package_code: PAYME_RECEIPT_PACKAGE_CODE,
-        vat_percent: PAYME_RECEIPT_VAT_PERCENT,
+        code: isPremiumMonthly ? DEFAULT_RECEIPT_CODE : PAYME_RECEIPT_CODE,
+        package_code: isPremiumMonthly ? DEFAULT_PACKAGE_CODE : PAYME_RECEIPT_PACKAGE_CODE,
+        vat_percent: isPremiumMonthly ? DEFAULT_VAT_PERCENT : PAYME_RECEIPT_VAT_PERCENT,
       },
     ],
   };
@@ -862,7 +867,7 @@ export async function grantPaymentEntitlement(admin: SupabaseClient, payment: Pa
   if (payment.type === "subscription") {
     const plan = normalizeSubscriptionPlan(payment.tier);
     const startsAt = payment.paid_at ?? new Date().toISOString();
-    const expiresAt = addOneMonth(new Date(startsAt)).toISOString();
+    const expiresAt = addPremiumSubscriptionDuration(new Date(startsAt)).toISOString();
 
     await updateUserSubscriptionColumns(admin, payment.user_id, {
       subscription: plan,

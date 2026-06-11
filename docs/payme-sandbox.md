@@ -13,18 +13,19 @@ Set these as server-only variables in Vercel. Do not expose them with `EXPO_PUBL
 ```env
 PAYME_TEST_MODE=true
 PAYME_MERCHANT_ID=6a0aa667f424d415a5bc18da
+PAYME_SECRET_KEY=<sandbox secret key if PAYME_TEST_KEY is not used>
 PAYME_TEST_KEY=<TEST_KEY from Payme Business sandbox>
 PAYME_KEY=<production key only; leave empty in sandbox>
 PAYME_MERCHANT_LOGIN=Paycom
 PAYME_CHECKOUT_URL=https://checkout.paycom.uz
 PAYME_MXIK_CODE=10899004001000000
-PAYME_PACKAGE_CODE=123456
-PAYME_VAT_PERCENT=12
+PAYME_PACKAGE_CODE=121
+PAYME_VAT_PERCENT=0
 SUPABASE_URL=<supabase project url>
 SUPABASE_SERVICE_ROLE_KEY=<service role key>
 ```
 
-For sandbox verification at `https://test.paycom.uz`, use the Merchant ID above, set `PAYME_TEST_KEY` to the TEST_KEY from the Payme cabinet, and use the endpoint URL. When `PAYME_TEST_MODE=true`, checkout links are generated with `https://test.paycom.uz` and `PAYME_KEY` is ignored.
+For sandbox verification at `https://test.paycom.uz`, use the Merchant ID above, set `PAYME_TEST_KEY` to the TEST_KEY from the Payme cabinet, and use the endpoint URL. If your deployment uses the generic name, put the sandbox secret in `PAYME_SECRET_KEY`. When `PAYME_TEST_MODE=true`, checkout links are generated with `https://test.paycom.uz` and `PAYME_KEY` is ignored.
 
 ## Database
 
@@ -32,6 +33,7 @@ Run [supabase-payme.sql](../supabase-payme.sql) once in Supabase SQL Editor.
 
 Created/updated tables:
 
+- `subscription_plans`
 - `payments`
 - `payme_transactions`
 - `subscriptions`
@@ -60,7 +62,7 @@ Content-Type: application/json
 
 The returned `payment_id` is used by the app result page. Payme Merchant API sandbox tests should use the provider account fields below instead of `account.payment_id`.
 
-Premium amount is `2400000` tiyin (`24 000 so'm`).
+Premium amount is `2400000` tiyin (`24 000 so'm`) for 30 days.
 
 ## Postman Setup
 
@@ -118,7 +120,23 @@ to={{$timestamp}}
 }
 ```
 
-Expected: `result.allow = true`, with `detail.items[0].title`, `price`, `count`, `code`, `package_code`, `vat_percent`.
+Expected: `result.allow = true`, with this Soliq detail object in `result.detail`:
+
+```json
+{
+  "receipt_type": 0,
+  "items": [
+    {
+      "title": "Milliy Tiklanish Premium",
+      "price": 2400000,
+      "count": 1,
+      "code": "10899004001000000",
+      "package_code": "121",
+      "vat_percent": 0
+    }
+  ]
+}
+```
 
 Legacy app compatibility still works if `payment_id` is present, but it is not required by the sandbox form:
 
@@ -166,7 +184,7 @@ Expected: `state = 1`. If there is no pending `payments` row, the API creates on
 }
 ```
 
-Expected: `state = 2`. The related profile gets `subscription = premium`, `premium_until = now + 1 month`, and `subscriptions` gets an active premium row.
+Expected: `state = 2`. The related profile gets `subscription = premium`, `premium_until = paid_at + 30 days`, and `subscriptions` gets an active premium row.
 
 ### CheckTransaction
 
@@ -287,7 +305,7 @@ Expected error: `-31008`; local transaction becomes `state = -1`, `reason = 4`.
 ## Payme Sandbox Flow
 
 1. Deploy the API to Vercel.
-2. Set `PAYME_TEST_MODE=true`, `PAYME_MERCHANT_ID`, `PAYME_TEST_KEY`, `SUPABASE_URL`, and `SUPABASE_SERVICE_ROLE_KEY` in Vercel.
+2. Set `PAYME_TEST_MODE=true`, `PAYME_MERCHANT_ID`, `PAYME_TEST_KEY` or `PAYME_SECRET_KEY`, `SUPABASE_URL`, and `SUPABASE_SERVICE_ROLE_KEY` in Vercel.
 3. Run [supabase-payme.sql](../supabase-payme.sql).
 4. Create a real pending payment from the app or let `CreateTransaction` create it automatically.
 5. Open `https://test.paycom.uz`.

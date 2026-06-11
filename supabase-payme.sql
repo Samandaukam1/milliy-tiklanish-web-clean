@@ -10,6 +10,52 @@ begin
 end;
 $$;
 
+-- Subscription catalog used by checkout and merchant validation.
+create table if not exists public.subscription_plans (
+  code text primary key,
+  tier text not null check (tier in ('premium', 'pro')),
+  name text not null,
+  amount numeric(12, 2) not null,
+  amount_tiyin bigint not null,
+  duration_days integer not null,
+  is_active boolean not null default true,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+insert into public.subscription_plans (
+  code,
+  tier,
+  name,
+  amount,
+  amount_tiyin,
+  duration_days,
+  is_active
+)
+values (
+  'premium_monthly',
+  'premium',
+  'Milliy Tiklanish Premium',
+  24000,
+  2400000,
+  30,
+  true
+)
+on conflict (code) do update
+set
+  tier = excluded.tier,
+  name = excluded.name,
+  amount = excluded.amount,
+  amount_tiyin = excluded.amount_tiyin,
+  duration_days = excluded.duration_days,
+  is_active = excluded.is_active,
+  updated_at = now();
+
+drop trigger if exists subscription_plans_set_updated_at on public.subscription_plans;
+create trigger subscription_plans_set_updated_at
+before update on public.subscription_plans
+for each row execute function public.set_updated_at();
+
 -- Core payment intent table used by /api/payme/create-payment.
 create table if not exists public.payments (
   id uuid primary key default gen_random_uuid(),
@@ -152,14 +198,15 @@ create trigger subscriptions_set_updated_at
 before update on public.subscriptions
 for each row execute function public.set_updated_at();
 
--- This app's public user table is profiles. If you also have public.users,
--- the API updates both when the table exists.
+-- This app's public user table is profiles. The Merchant API validates
+-- account.user_id against public.profiles.
 alter table if exists public.profiles add column if not exists subscription text not null default 'free';
 alter table if exists public.profiles add column if not exists subscription_starts_at timestamptz;
 alter table if exists public.profiles add column if not exists subscription_expires_at timestamptz;
 alter table if exists public.profiles add column if not exists premium_until timestamptz;
 alter table if exists public.profiles add column if not exists updated_at timestamptz not null default now();
 
+-- Optional compatibility mirror for older app code that reads public.users.
 alter table if exists public.users add column if not exists subscription text not null default 'free';
 alter table if exists public.users add column if not exists subscription_starts_at timestamptz;
 alter table if exists public.users add column if not exists subscription_expires_at timestamptz;
@@ -210,9 +257,16 @@ end;
 $$;
 
 alter table public.payments enable row level security;
+alter table public.subscription_plans enable row level security;
 alter table public.payme_transactions enable row level security;
 alter table public.payment_logs enable row level security;
 alter table public.subscriptions enable row level security;
+
+drop policy if exists "service role full access on subscription_plans" on public.subscription_plans;
+create policy "service role full access on subscription_plans"
+  on public.subscription_plans for all
+  using (auth.role() = 'service_role')
+  with check (auth.role() = 'service_role');
 
 drop policy if exists "service role full access on payments" on public.payments;
 create policy "service role full access on payments"
