@@ -302,7 +302,7 @@ New Payme transaction id while the same subscription payment is pending:
 2. Call `CreateTransaction` again with `payme_transaction_id=B` for the same pending premium monthly account.
 3. Call `CheckTransaction` with `payme_transaction_id=B`.
 
-Expected: the second `CreateTransaction` stores `B` in `payme_transactions` with `state = -1` and `reason = 3`, then returns error `-31050` with `data = account`. `CheckTransaction` for `B` must find the row and return `transaction = B`, `state = -1`, and `reason = 3`.
+Expected: the second `CreateTransaction` stores `B` in `payme_transactions` with `state = 1` and `reason = null`, then returns error `-31050` with `data = account`. `CheckTransaction` for `B` must find the row and return `transaction = B`, `state = 1`, and `reason = null`.
 
 Expired transaction:
 

@@ -568,8 +568,8 @@ async function handleCreateTransaction(
         external_receipt_id: payment.external_receipt_id,
         account,
         amount_tiyin: amountTiyin,
-        state: PAYME_STATE.CANCELLED,
-        reason: PAYME_REASON_ACCOUNT_BUSY,
+        state: PAYME_STATE.CREATED,
+        reason: null,
         payme_time: paymeTime,
         create_time: paymeTime,
         perform_time: 0,
@@ -581,7 +581,7 @@ async function handleCreateTransaction(
       return buildRpcResponse(admin, payload, accountPendingError(payload.id), {
         paymentId: payment.id,
         externalTransactionId,
-        state: PAYME_STATE.CANCELLED,
+        state: PAYME_STATE.CREATED,
       });
     }
   }
