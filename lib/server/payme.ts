@@ -596,6 +596,30 @@ export async function getPaymentTransactionByPaymentId(admin: SupabaseClient, pa
   return null;
 }
 
+export async function getCreatedPaymentTransactionByPaymentId(admin: SupabaseClient, paymentId: string): Promise<PaymentTransactionRecord | null> {
+  for (const table of [PAYME_TRANSACTION_TABLE, LEGACY_PAYME_TRANSACTION_TABLE]) {
+    const { data, error } = await (admin.from(table) as any)
+      .select("*")
+      .eq("payment_id", paymentId)
+      .eq("state", PAYME_STATE.CREATED)
+      .order("create_time", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (!error && data) {
+      return normalizePaymentTransactionRecord(data as Record<string, unknown>);
+    }
+
+    const errorText = formatSupabaseError(error);
+    if (error && !isMissingSchemaError(errorText)) {
+      console.warn("[payme] Failed to read created transaction by payment", { table, error: errorText });
+      return null;
+    }
+  }
+
+  return null;
+}
+
 export async function getPaymentTransactionsForStatement(admin: SupabaseClient, from: number, to: number): Promise<PaymentTransactionRecord[]> {
   const { data, error } = await (admin.from(PAYME_TRANSACTION_TABLE) as any)
     .select("*")

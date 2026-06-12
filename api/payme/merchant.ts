@@ -3,6 +3,7 @@ import {
   createPremiumMonthlyPayment,
   createPaymentsAdminClient,
   expirePaymentTransaction,
+  getCreatedPaymentTransactionByPaymentId,
   getPendingPremiumMonthlyPayment,
   getPaymentById,
   getPaymentTransactionByExternalId,
@@ -30,6 +31,8 @@ import {
   type PaymentTransactionRecord,
 } from "../../lib/server/payme";
 import type { SupabaseClient } from "@supabase/supabase-js";
+
+const PAYME_REASON_ACCOUNT_BUSY = 3;
 
 type ServerlessRequest = {
   method?: string;
@@ -198,6 +201,19 @@ function cannotPerformError(id: PaymeRpcId, message?: string): PaymeRpcResponseB
       "Невозможно выполнить операцию",
       "Cannot perform operation"
     )
+  );
+}
+
+function accountPendingError(id: PaymeRpcId): PaymeRpcResponseBody {
+  return errorBody(
+    id,
+    PAYME_ERROR.ACCOUNT_INVALID,
+    localizedMessage(
+      "Bu hisob bo'yicha pending tranzaksiya mavjud",
+      "По этому аккаунту уже есть ожидающая транзакция",
+      "A pending transaction already exists for this account"
+    ),
+    "account"
   );
 }
 
@@ -495,6 +511,14 @@ async function handleCreateTransaction(
       });
     }
 
+    if (existingByExternal.state === PAYME_STATE.CANCELLED && existingByExternal.reason === PAYME_REASON_ACCOUNT_BUSY) {
+      return buildRpcResponse(admin, payload, accountPendingError(payload.id), {
+        paymentId: existingPayment.id,
+        externalTransactionId,
+        state: existingByExternal.state,
+      });
+    }
+
     return buildRpcResponse(admin, payload, successBody(payload.id, createResult(existingByExternal)), {
       paymentId: existingPayment.id,
       externalTransactionId,
@@ -529,6 +553,39 @@ async function handleCreateTransaction(
   if (validationError) {
     return buildRpcResponse(admin, payload, validationError, { paymentId: payment.id, externalTransactionId });
   }
+
+  const activeTransaction = await getCreatedPaymentTransactionByPaymentId(admin, payment.id);
+  if (activeTransaction && getTransactionPaymeId(activeTransaction) !== externalTransactionId) {
+    if (isTransactionExpired(activeTransaction)) {
+      await expirePaymentTransaction(admin, payment, activeTransaction, payload as Record<string, unknown>);
+    } else {
+      const rejectedTransaction: PaymentTransactionRecord = {
+        id: null,
+        payment_id: payment.id,
+        external_transaction_id: externalTransactionId,
+        payme_transaction_id: externalTransactionId,
+        payme_id: externalTransactionId,
+        external_receipt_id: payment.external_receipt_id,
+        account,
+        amount_tiyin: amountTiyin,
+        state: PAYME_STATE.CANCELLED,
+        reason: PAYME_REASON_ACCOUNT_BUSY,
+        payme_time: paymeTime,
+        create_time: paymeTime,
+        perform_time: 0,
+        cancel_time: 0,
+        raw_request: payload as Record<string, unknown>,
+      };
+
+      await upsertPaymentTransaction(admin, rejectedTransaction);
+      return buildRpcResponse(admin, payload, accountPendingError(payload.id), {
+        paymentId: payment.id,
+        externalTransactionId,
+        state: PAYME_STATE.CANCELLED,
+      });
+    }
+  }
+
   const createTime = paymeTime;
   const transaction: PaymentTransactionRecord = {
     id: null,
