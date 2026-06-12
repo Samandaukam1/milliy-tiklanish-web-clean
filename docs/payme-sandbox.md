@@ -169,7 +169,7 @@ Legacy app compatibility still works if `payment_id` is present, but it is not r
 }
 ```
 
-Expected: `state = 1`. If there is no pending `payments` row, the API creates one automatically. Repeating the same request must return the same `create_time`, `transaction`, and `state`.
+Expected: `state = 1`, `create_time = params.time`, and `transaction = params.id`. If there is no pending `payments` row, the API creates one automatically. Repeating the same request must return the same `create_time`, `transaction`, and `state`.
 
 Important: `params.id` is the Payme transaction id. It is stored in `payme_transactions.payme_transaction_id`, `payme_transactions.payme_id`, and the legacy `external_transaction_id` column when those columns exist. Use the same `params.id` for `CheckTransaction`, `PerformTransaction`, and `CancelTransaction`.
 
@@ -201,7 +201,7 @@ Expected: `state = 2`. The related profile gets `subscription = premium`, `premi
 }
 ```
 
-Expected: `create_time`, `perform_time`, `cancel_time`, `transaction`, `state`, `reason`.
+Expected: `create_time`, `perform_time`, `cancel_time`, `transaction = params.id`, `state`, `reason`.
 
 ### CancelTransaction
 
@@ -296,12 +296,13 @@ Duplicate new transaction for the same pending subscription payment:
 
 Expected: the same `create_time`, `transaction`, and `state`.
 
-Account busy while another transaction is pending:
+New Payme transaction id while the same subscription payment is pending:
 
 1. Call `CreateTransaction` with `payme_transaction_id=A`.
 2. Call `CreateTransaction` again with `payme_transaction_id=B` for the same pending premium monthly account.
+3. Call `CheckTransaction` with `payme_transaction_id=B`.
 
-Expected error: `-31050` with `data = account`.
+Expected: both `CreateTransaction` calls return success. The second call creates or updates a `payme_transactions` row linked to the existing pending `payment_id`, returns `transaction = B`, and `CheckTransaction` finds `B`.
 
 Expired transaction:
 

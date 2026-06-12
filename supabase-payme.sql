@@ -126,6 +126,7 @@ create table if not exists public.payme_transactions (
   payme_id text unique,
   external_receipt_id text,
   account jsonb not null default '{}'::jsonb,
+  amount bigint,
   amount_tiyin bigint not null,
   state integer not null,
   reason integer,
@@ -144,9 +145,15 @@ alter table public.payme_transactions add column if not exists payme_transaction
 alter table public.payme_transactions add column if not exists payme_id text;
 alter table public.payme_transactions add column if not exists external_receipt_id text;
 alter table public.payme_transactions add column if not exists account jsonb not null default '{}'::jsonb;
+alter table public.payme_transactions add column if not exists amount bigint;
 alter table public.payme_transactions add column if not exists raw_request jsonb not null default '{}'::jsonb;
 alter table public.payme_transactions add column if not exists created_at timestamptz not null default now();
 alter table public.payme_transactions add column if not exists updated_at timestamptz not null default now();
+
+update public.payme_transactions
+set amount = amount_tiyin
+where amount is null
+  and amount_tiyin is not null;
 
 update public.payme_transactions
 set external_transaction_id = coalesce(external_transaction_id, payme_transaction_id, payme_id)
@@ -272,6 +279,7 @@ begin
       payme_id,
       external_receipt_id,
       account,
+      amount,
       amount_tiyin,
       state,
       reason,
@@ -291,6 +299,7 @@ begin
       external_transaction_id,
       external_receipt_id,
       coalesce(account, '{}'::jsonb),
+      amount_tiyin,
       amount_tiyin,
       state,
       reason,

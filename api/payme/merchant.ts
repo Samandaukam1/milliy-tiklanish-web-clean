@@ -6,7 +6,6 @@ import {
   getPendingPremiumMonthlyPayment,
   getPaymentById,
   getPaymentTransactionByExternalId,
-  getPaymentTransactionByPaymentId,
   getPaymentTransactionsForStatement,
   getPremiumMonthlyPaymentDescription,
   getUserPaymentEligibility,
@@ -202,19 +201,6 @@ function cannotPerformError(id: PaymeRpcId, message?: string): PaymeRpcResponseB
   );
 }
 
-function accountBusyError(id: PaymeRpcId): PaymeRpcResponseBody {
-  return errorBody(
-    id,
-    PAYME_ERROR.ACCOUNT_INVALID,
-    localizedMessage(
-      "Bu obuna uchun pending to'lov mavjud",
-      "По этому аккаунту уже есть ожидающий платеж",
-      "A pending payment already exists for this account"
-    ),
-    "account"
-  );
-}
-
 function transactionNotFoundError(id: PaymeRpcId): PaymeRpcResponseBody {
   return errorBody(
     id,
@@ -300,17 +286,21 @@ async function buildRpcResponse(
   return body;
 }
 
+function getTransactionPaymeId(transaction: PaymentTransactionRecord): string {
+  return transaction.payme_transaction_id || transaction.payme_id || transaction.external_transaction_id;
+}
+
 function createResult(transaction: PaymentTransactionRecord): Record<string, unknown> {
   return {
     create_time: transaction.create_time,
-    transaction: transaction.payment_id,
+    transaction: getTransactionPaymeId(transaction),
     state: transaction.state,
   };
 }
 
 function performResult(transaction: PaymentTransactionRecord): Record<string, unknown> {
   return {
-    transaction: transaction.payment_id,
+    transaction: getTransactionPaymeId(transaction),
     perform_time: transaction.perform_time,
     state: transaction.state,
   };
@@ -318,7 +308,7 @@ function performResult(transaction: PaymentTransactionRecord): Record<string, un
 
 function cancelResult(transaction: PaymentTransactionRecord): Record<string, unknown> {
   return {
-    transaction: transaction.payment_id,
+    transaction: getTransactionPaymeId(transaction),
     cancel_time: transaction.cancel_time,
     state: transaction.state,
   };
@@ -329,7 +319,7 @@ function checkResult(transaction: PaymentTransactionRecord): Record<string, unkn
     create_time: transaction.create_time,
     perform_time: transaction.perform_time,
     cancel_time: transaction.cancel_time,
-    transaction: transaction.payment_id,
+    transaction: getTransactionPaymeId(transaction),
     state: transaction.state,
     reason: transaction.reason,
   };
@@ -539,21 +529,7 @@ async function handleCreateTransaction(
   if (validationError) {
     return buildRpcResponse(admin, payload, validationError, { paymentId: payment.id, externalTransactionId });
   }
-
-  const existingByPayment = await getPaymentTransactionByPaymentId(admin, payment.id);
-  if (existingByPayment && existingByPayment.external_transaction_id !== externalTransactionId) {
-    if (existingByPayment.state === PAYME_STATE.CREATED && isTransactionExpired(existingByPayment)) {
-      await expirePaymentTransaction(admin, payment, existingByPayment, payload as Record<string, unknown>);
-    }
-
-    return buildRpcResponse(admin, payload, accountBusyError(payload.id), {
-      paymentId: payment.id,
-      externalTransactionId,
-      state: existingByPayment.state,
-    });
-  }
-
-  const createTime = Date.now();
+  const createTime = paymeTime;
   const transaction: PaymentTransactionRecord = {
     id: null,
     payment_id: payment.id,
@@ -774,7 +750,7 @@ async function handleGetStatement(
         create_time: transaction.create_time,
         perform_time: transaction.perform_time,
         cancel_time: transaction.cancel_time,
-        transaction: transaction.payment_id,
+        transaction: getTransactionPaymeId(transaction),
         state: transaction.state,
         reason: transaction.reason,
       })),

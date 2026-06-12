@@ -631,6 +631,10 @@ export async function upsertPaymentTransaction(
     raw_request: transaction.raw_request,
     updated_at: new Date().toISOString(),
   };
+  const payloadBases = [
+    { ...basePayload, amount: transaction.amount_tiyin },
+    basePayload,
+  ];
 
   const attempts = [
     { lookup: "payme_transaction_id", columns: PAYME_TRANSACTION_ID_COLUMNS },
@@ -643,55 +647,59 @@ export async function upsertPaymentTransaction(
 
   let lastErrorText = "";
 
-  for (const attempt of attempts) {
-    const payload = { ...basePayload };
-    for (const column of attempt.columns) {
-      payload[column] = paymeTransactionId;
-    }
+  for (const payloadBase of payloadBases) {
+    for (const attempt of attempts) {
+      const payload = { ...payloadBase };
+      for (const column of attempt.columns) {
+        payload[column] = paymeTransactionId;
+      }
 
-    const { data, error } = await (admin.from(PAYME_TRANSACTION_TABLE) as any)
-      .update(payload)
-      .eq(attempt.lookup, paymeTransactionId)
-      .select("payment_id")
-      .limit(1);
+      const { data, error } = await (admin.from(PAYME_TRANSACTION_TABLE) as any)
+        .update(payload)
+        .eq(attempt.lookup, paymeTransactionId)
+        .select("payment_id")
+        .limit(1);
 
-    if (!error && Array.isArray(data) && data.length > 0) {
-      return;
-    }
+      if (!error && Array.isArray(data) && data.length > 0) {
+        return;
+      }
 
-    lastErrorText = formatSupabaseError(error) || lastErrorText;
-    if (error && !isMissingSchemaError(lastErrorText)) {
-      break;
+      lastErrorText = formatSupabaseError(error) || lastErrorText;
+      if (error && !isMissingSchemaError(lastErrorText)) {
+        break;
+      }
     }
   }
 
-  for (const attempt of attempts) {
-    const payload = { ...basePayload };
-    for (const column of attempt.columns) {
-      payload[column] = paymeTransactionId;
-    }
+  for (const payloadBase of payloadBases) {
+    for (const attempt of attempts) {
+      const payload = { ...payloadBase };
+      for (const column of attempt.columns) {
+        payload[column] = paymeTransactionId;
+      }
 
-    const { error } = await (admin.from(PAYME_TRANSACTION_TABLE) as any).insert(payload);
+      const { error } = await (admin.from(PAYME_TRANSACTION_TABLE) as any).insert(payload);
 
-    if (!error) {
-      return;
-    }
-
-    lastErrorText = formatSupabaseError(error) || lastErrorText;
-    if (isDuplicateKeyError(lastErrorText)) {
-      const existing = await getPaymentTransactionByExternalId(admin, paymeTransactionId);
-      if (existing) {
-        await upsertPaymentTransaction(admin, {
-          ...transaction,
-          id: existing.id,
-          payment_id: existing.payment_id,
-        });
+      if (!error) {
         return;
       }
-    }
 
-    if (!isMissingSchemaError(lastErrorText) && !isDuplicateKeyError(lastErrorText)) {
-      break;
+      lastErrorText = formatSupabaseError(error) || lastErrorText;
+      if (isDuplicateKeyError(lastErrorText)) {
+        const existing = await getPaymentTransactionByExternalId(admin, paymeTransactionId);
+        if (existing) {
+          await upsertPaymentTransaction(admin, {
+            ...transaction,
+            id: existing.id,
+            payment_id: existing.payment_id,
+          });
+          return;
+        }
+      }
+
+      if (!isMissingSchemaError(lastErrorText) && !isDuplicateKeyError(lastErrorText)) {
+        break;
+      }
     }
   }
 
