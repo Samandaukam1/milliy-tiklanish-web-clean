@@ -303,7 +303,7 @@ async function buildRpcResponse(
 }
 
 function getTransactionPaymeId(transaction: PaymentTransactionRecord): string {
-  return transaction.payme_transaction_id || transaction.payme_id || transaction.external_transaction_id;
+  return transaction.payme_transaction_id || transaction.payme_id;
 }
 
 function createResult(transaction: PaymentTransactionRecord): Record<string, unknown> {
@@ -337,7 +337,7 @@ function checkResult(transaction: PaymentTransactionRecord): Record<string, unkn
     cancel_time: transaction.cancel_time,
     transaction: getTransactionPaymeId(transaction),
     state: transaction.state,
-    reason: transaction.reason,
+    reason: transaction.reason || null,
   };
 }
 
@@ -809,7 +809,7 @@ async function handleGetStatement(
         cancel_time: transaction.cancel_time,
         transaction: getTransactionPaymeId(transaction),
         state: transaction.state,
-        reason: transaction.reason,
+        reason: transaction.reason || null,
       })),
     })
   );
