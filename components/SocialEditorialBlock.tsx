@@ -236,7 +236,7 @@ export function SocialEditorialBlock() {
         {isDesktop && (
           <View style={styles.editorialHeading}>
             <Text style={[styles.editorialTitle, { color: colors.text }]}>
-              Milliy Tiklanish Tahririyati
+              Milliy Tiklanish Gazetasi Tahririyati
             </Text>
             <Text style={[styles.editorialDesc, { color: colors.textSecondary }]}>
               Mustaqil jurnalistika · Professional tahrir jamoasi

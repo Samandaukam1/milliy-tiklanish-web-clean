@@ -1,5 +1,5 @@
 import { router, Stack } from "expo-router";
-import { ArrowLeft, Users, Edit3, Award, Globe } from "lucide-react-native";
+import { ArrowLeft, Users, Edit3, Award, Globe, MapPin, Building2 } from "lucide-react-native";
 import React from "react";
 import {
   Pressable,
@@ -13,32 +13,19 @@ import { Palette } from "@/constants/colors";
 import { Fonts } from "@/constants/fonts";
 import { useColors } from "@/utils/useColors";
 
-const TEAM = [
-  {
-    role: "Bosh muharrir",
-    name: "Dilshod Yusupov",
-    desc: "20 yildan ortiq jurnalistika tajribasi. Siyosat va iqtisod mutaxassisi.",
-  },
-  {
-    role: "Mas'ul kotib",
-    name: "Zilola Rahimova",
-    desc: "Tahrir jarayonlarini boshqaradi. Nashr sifatini ta'minlaydi.",
-  },
-  {
-    role: "Ijtimoiy muharrir",
-    name: "Bobur Mirzaev",
-    desc: "Ijtimoiy va madaniy mavzular bo'yicha mutaxassis jurnalist.",
-  },
-  {
-    role: "Iqtisod muharriri",
-    name: "Nasiba Xoliqova",
-    desc: "Iqtisodiy tahlil va biznes jurnalistikasining yetakchi mutaxassisi.",
-  },
-  {
-    role: "Xalqaro muharrir",
-    name: "Jasur Toshmatov",
-    desc: "Xalqaro munosabatlar va tashqi siyosat bo'yicha tahlilchi.",
-  },
+const ORG_NAME = '"MILLIY TIKLANISH GAZETASI TAHRIRIYATI" MAS\'ULIYATI CHEKLANGAN JAMIYAT';
+const ORG_NAME_SHORT = "Milliy Tiklanish Gazetasi Tahririyati";
+const ADDRESS = "Toshkent shahri, Yunusobod tumani,\nА.ТЕМУР 1-tor ko'chasi, 2-uy";
+
+const TEAM: { role: string; name: string }[] = [
+  { name: "Mirodil Abdurahmonov",  role: "Bosh muharrir" },
+  { name: "Mamurjon Yo'ldoshev",   role: "Bosh muharrir o'rinbosari" },
+  { name: "Mahbuba Karimova",      role: "Bosh muharrir o'rinbosari" },
+  { name: "Axmedova Zarina",       role: "Muxbir" },
+  { name: "Maftuna Muhiddinova",   role: "Muxbir" },
+  { name: "Viloyat Shodiyeva",     role: "Muxbir" },
+  { name: "Abdug'affor Omonboyev", role: "Muxbir" },
+  { name: "Ravshan Mahmudov",      role: "Muxbir" },
 ];
 
 const STATS = [
@@ -47,6 +34,19 @@ const STATS = [
   { icon: <Award size={20} color={Palette.red} />, value: "2015", label: "Tashkil etilgan" },
   { icon: <Globe size={20} color={Palette.red} />, value: "4", label: "Til" },
 ];
+
+function getInitials(name: string): string {
+  const parts = name.trim().split(/\s+/);
+  if (parts.length === 1) return parts[0].charAt(0).toUpperCase();
+  return (parts[0].charAt(0) + parts[parts.length - 1].charAt(0)).toUpperCase();
+}
+
+// Role weight — used to assign a distinct accent color per tier
+function roleColor(role: string): string {
+  if (role === "Bosh muharrir") return Palette.red;
+  if (role.includes("o'rinbosari")) return "#5C6BC0";
+  return "#546E7A";
+}
 
 export default function EditorialPage() {
   const insets = useSafeAreaInsets();
@@ -116,27 +116,40 @@ export default function EditorialPage() {
           <Text style={styles.sectionKicker}>JAMOA</Text>
           <Text style={[styles.sectionTitle, { color: colors.text }]}>Tahririyat a'zolari</Text>
           <View style={styles.teamList}>
-            {TEAM.map((m) => (
-              <View key={m.name} style={[styles.teamCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
-                <View style={styles.teamAvatar}>
-                  <Text style={styles.teamInitial}>{m.name.charAt(0)}</Text>
+            {TEAM.map((m) => {
+              const initials = getInitials(m.name);
+              const accent = roleColor(m.role);
+              return (
+                <View
+                  key={m.name}
+                  style={[styles.teamCard, { backgroundColor: colors.card, borderColor: colors.border }]}
+                >
+                  <View style={[styles.teamAvatar, { backgroundColor: accent }]}>
+                    <Text style={styles.teamInitials}>{initials}</Text>
+                  </View>
+                  <View style={styles.teamInfo}>
+                    <Text style={[styles.teamRole, { color: accent }]}>{m.role.toUpperCase()}</Text>
+                    <Text style={[styles.teamName, { color: colors.text }]}>{m.name}</Text>
+                  </View>
                 </View>
-                <View style={styles.teamInfo}>
-                  <Text style={[styles.teamRole, { color: colors.textSecondary }]}>{m.role}</Text>
-                  <Text style={[styles.teamName, { color: colors.text }]}>{m.name}</Text>
-                  <Text style={[styles.teamDesc, { color: colors.textSecondary }]}>{m.desc}</Text>
-                </View>
-              </View>
-            ))}
+              );
+            })}
           </View>
         </View>
 
-        {/* Contact */}
+        {/* Company & Address */}
         <View style={[styles.contactCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
-          <Text style={[styles.contactTitle, { color: colors.text }]}>Muloqot</Text>
-          <Text style={[styles.contactText, { color: colors.textSecondary }]}>tahririyat@milliy-tiklanish.uz</Text>
-          <Text style={[styles.contactText, { color: colors.textSecondary }]}>+998 71 123 45 67</Text>
-          <Text style={[styles.contactText, { color: colors.textSecondary }]}>Toshkent, O'zbekiston</Text>
+          <Text style={[styles.contactTitle, { color: colors.text }]}>Tashkilot ma'lumotlari</Text>
+
+          <View style={styles.contactRow}>
+            <Building2 size={16} color={Palette.red} style={styles.contactIcon} />
+            <Text style={[styles.contactText, { color: colors.textSecondary }]}>{ORG_NAME}</Text>
+          </View>
+
+          <View style={styles.contactRow}>
+            <MapPin size={16} color={Palette.red} style={styles.contactIcon} />
+            <Text style={[styles.contactText, { color: colors.textSecondary }]}>{ADDRESS}</Text>
+          </View>
         </View>
       </ScrollView>
     </View>
@@ -171,6 +184,8 @@ const styles = StyleSheet.create({
     color: Palette.black,
   },
   scrollContent: { paddingBottom: 60 },
+
+  // Hero
   hero: {
     backgroundColor: Palette.black,
     padding: 28,
@@ -194,6 +209,8 @@ const styles = StyleSheet.create({
     color: "rgba(255,255,255,0.7)",
     lineHeight: 22,
   },
+
+  // Stats
   statsGrid: {
     flexDirection: "row",
     flexWrap: "wrap",
@@ -222,6 +239,8 @@ const styles = StyleSheet.create({
     color: Palette.textSecondary,
     fontWeight: "600",
   },
+
+  // Section
   section: { paddingHorizontal: 20, paddingTop: 28, gap: 12 },
   sectionKicker: {
     fontSize: 10,
@@ -235,6 +254,8 @@ const styles = StyleSheet.create({
     fontWeight: "800",
     color: Palette.black,
   },
+
+  // Mission
   missionList: { gap: 10 },
   missionItem: {
     flexDirection: "row",
@@ -253,13 +274,16 @@ const styles = StyleSheet.create({
     color: Palette.black,
     lineHeight: 22,
   },
-  teamList: { gap: 14 },
+
+  // Team
+  teamList: { gap: 12 },
   teamCard: {
     flexDirection: "row",
+    alignItems: "center",
     gap: 16,
     backgroundColor: Palette.white,
     borderRadius: 18,
-    padding: 18,
+    padding: 16,
     borderWidth: 1,
     borderColor: "#ECE6D8",
   },
@@ -272,36 +296,34 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     flexShrink: 0,
   },
-  teamInitial: {
+  teamInitials: {
     color: Palette.white,
-    fontSize: 22,
+    fontSize: 18,
     fontWeight: "800",
+    letterSpacing: 0.5,
   },
-  teamInfo: { flex: 1, gap: 2 },
+  teamInfo: { flex: 1, gap: 3 },
   teamRole: {
-    fontSize: 10,
+    fontSize: 9,
     fontWeight: "800",
-    letterSpacing: 1.5,
-    color: Palette.beige,
-    textTransform: "uppercase",
+    letterSpacing: 1.4,
+    color: Palette.red,
   },
   teamName: {
     fontSize: 16,
     fontWeight: "800",
     color: Palette.black,
+    lineHeight: 22,
   },
-  teamDesc: {
-    fontSize: 13,
-    color: Palette.textSecondary,
-    lineHeight: 19,
-    marginTop: 2,
-  },
+
+  // Contact / Company
   contactCard: {
     margin: 20,
+    marginTop: 28,
     backgroundColor: Palette.creamDeep,
     borderRadius: 18,
     padding: 22,
-    gap: 8,
+    gap: 14,
     borderWidth: 1,
     borderColor: "#ECE6D8",
   },
@@ -310,9 +332,19 @@ const styles = StyleSheet.create({
     fontFamily: Fonts.serif,
     fontWeight: "800",
     color: Palette.black,
-    marginBottom: 4,
+    marginBottom: 2,
   },
+  contactRow: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 10,
+  },
+  contactIcon: {
+    marginTop: 2,
+    flexShrink: 0,
+  } as any,
   contactText: {
+    flex: 1,
     fontSize: 14,
     color: Palette.textSecondary,
     lineHeight: 22,
