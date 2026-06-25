@@ -12,6 +12,7 @@ import {
   Text,
   View,
 } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import * as WebBrowser from "expo-web-browser";
 import { Palette } from "@/constants/colors";
 import { Fonts } from "@/constants/fonts";
@@ -41,8 +42,10 @@ function formatCountdown(totalSeconds: number): string {
 }
 
 export default function SubscribeScreen() {
-  const { deviceUserId, user } = useApp();
+  const { deviceUserId, user, subscription } = useApp();
   const colors = useColors();
+  const insets = useSafeAreaInsets();
+  const isPremiumActive = subscription === "premium" || subscription === "pro";
   const [paymentLoading, setPaymentLoading] = useState(false);
   const [dealSecondsLeft, setDealSecondsLeft] = useState(DEAL_DURATION_SECONDS);
   const dealDeadlineRef = useRef(Date.now() + DEAL_DURATION_SECONDS * 1000);
@@ -184,10 +187,14 @@ export default function SubscribeScreen() {
     outputRange: [1, 1.012],
   });
 
+  const footerPaddingBottom: any = Platform.OS === "web"
+    ? "calc(18px + env(safe-area-inset-bottom))"
+    : Math.max(28, insets.bottom + 10);
+
   return (
     <View style={[styles.wrap, { backgroundColor: colors.background }]}>
       <Stack.Screen options={{ headerShown: false }} />
-      <View style={styles.topBar}>
+      <View style={[styles.topBar, { paddingTop: 12 + insets.top }]}>
         <Pressable onPress={() => router.back()} style={[styles.close, { backgroundColor: colors.card, borderColor: colors.border }]} testID="sub-close">
           <X size={20} color={colors.iconColor} />
         </Pressable>
@@ -277,35 +284,42 @@ export default function SubscribeScreen() {
         </Text>
       </ScrollView>
 
-      <View style={[styles.footer, { backgroundColor: colors.background, borderTopColor: colors.border }]}>
-        <Animated.View
-          style={[
-            styles.ctaPulseShell,
-            {
-              shadowOpacity: ctaShadowOpacity,
-              shadowRadius: ctaShadowRadius,
-              transform: [{ scale: ctaPulseScale }],
-            } as any,
-            paymentLoading && { opacity: 0.7 },
-          ]}
-        >
-          <Pressable
-            onPress={onSubscribe}
-            style={({ hovered, pressed }: any) => [
-              styles.cta,
-              hovered && styles.ctaHovered,
-              pressed && styles.ctaPressed,
+      <View style={[styles.footer, { backgroundColor: colors.background, borderTopColor: colors.border, paddingBottom: footerPaddingBottom }]}>
+        {isPremiumActive ? (
+          <View style={[styles.cta, styles.ctaActive]}>
+            <Crown size={18} color={Palette.white} fill={Palette.white} />
+            <Text style={styles.ctaText}>Premium faol</Text>
+          </View>
+        ) : (
+          <Animated.View
+            style={[
+              styles.ctaPulseShell,
+              {
+                shadowOpacity: ctaShadowOpacity,
+                shadowRadius: ctaShadowRadius,
+                transform: [{ scale: ctaPulseScale }],
+              } as any,
+              paymentLoading && { opacity: 0.7 },
             ]}
-            disabled={paymentLoading}
-            testID="sub-cta"
           >
-            {paymentLoading ? (
-              <ActivityIndicator color={Palette.white} />
-            ) : (
-              <Text style={styles.ctaText}>{"Premium obuna bo'lish"}</Text>
-            )}
-          </Pressable>
-        </Animated.View>
+            <Pressable
+              onPress={onSubscribe}
+              style={({ hovered, pressed }: any) => [
+                styles.cta,
+                hovered && styles.ctaHovered,
+                pressed && styles.ctaPressed,
+              ]}
+              disabled={paymentLoading}
+              testID="sub-cta"
+            >
+              {paymentLoading ? (
+                <ActivityIndicator color={Palette.white} />
+              ) : (
+                <Text style={styles.ctaText}>{"Premium obuna bo'lish"}</Text>
+              )}
+            </Pressable>
+          </Animated.View>
+        )}
       </View>
     </View>
   );
@@ -313,7 +327,7 @@ export default function SubscribeScreen() {
 
 const styles = StyleSheet.create({
   wrap: { flex: 1, backgroundColor: Palette.cream },
-  topBar: { paddingHorizontal: 16, paddingTop: 12, alignItems: "flex-end" },
+  topBar: { paddingHorizontal: 16, alignItems: "flex-end" },
   close: {
     width: 36,
     height: 36,
@@ -357,7 +371,6 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     backgroundColor: "#090909",
     padding: 20,
-    minHeight: 420,
     transform: [{ scale: 1 }],
   },
   premiumCardHovered: {
@@ -397,16 +410,12 @@ const styles = StyleSheet.create({
     fontWeight: "800",
   },
   premiumHeader: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    justifyContent: "space-between",
-    alignItems: "flex-end",
-    gap: 18,
+    flexDirection: "column",
+    gap: 16,
     marginTop: 24,
   },
   premiumIntro: {
-    flex: 1,
-    minWidth: 210,
+    flex: 0,
   },
   discountBadge: {
     flexDirection: "row",
@@ -434,7 +443,6 @@ const styles = StyleSheet.create({
   },
   priceBlock: {
     alignItems: "flex-start",
-    minWidth: 190,
   },
   oldPrice: {
     color: "rgba(255,255,255,0.48)",
@@ -495,8 +503,8 @@ const styles = StyleSheet.create({
     bottom: 0,
     left: 0,
     right: 0,
-    padding: 18,
-    paddingBottom: 32,
+    paddingTop: 18,
+    paddingHorizontal: 18,
     backgroundColor: Palette.cream,
     borderTopWidth: 1,
     borderTopColor: "#ECE6D8",
@@ -517,7 +525,14 @@ const styles = StyleSheet.create({
     paddingVertical: 16,
     borderRadius: 8,
     alignItems: "center",
+    flexDirection: "row",
+    justifyContent: "center",
+    gap: 8,
     transform: [{ scale: 1 }],
+  },
+  ctaActive: {
+    backgroundColor: "#22a055",
+    opacity: 1,
   },
   ctaHovered: {
     backgroundColor: Palette.redDark,

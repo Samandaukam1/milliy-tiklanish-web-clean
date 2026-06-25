@@ -6,6 +6,7 @@ import {
   Modal,
   Platform,
   Pressable,
+  ScrollView,
   StyleSheet,
   Text,
   View,
@@ -76,59 +77,65 @@ export function PremiumLockModal({
             <X size={20} color={colors.textSecondary} />
           </Pressable>
 
-          <View style={modalStyles.iconWrap}>
-            <Crown size={36} color={Palette.white} />
-          </View>
+          <ScrollView
+            contentContainerStyle={modalStyles.scrollContent}
+            showsVerticalScrollIndicator={false}
+            bounces={false}
+          >
+            <View style={modalStyles.iconWrap}>
+              <Crown size={36} color={Palette.white} />
+            </View>
 
-          <Text style={[modalStyles.title, { color: colors.text }]}>Premium Maqola</Text>
-          <Text style={[modalStyles.desc, { color: colors.textSecondary }]}>
-            {"Bu maqola faqat premium obunachilarga mavjud. Premiumga obuna bo'ling yoki faqat shu maqolani sotib oling."}
-          </Text>
+            <Text style={[modalStyles.title, { color: colors.text }]}>Premium Maqola</Text>
+            <Text style={[modalStyles.desc, { color: colors.textSecondary }]}>
+              {"Bu maqola faqat premium obunachilarga mavjud. Premiumga obuna bo'ling yoki faqat shu maqolani sotib oling."}
+            </Text>
 
-          <View style={modalStyles.btnRow}>
-            <Pressable
-              style={[modalStyles.btn, modalStyles.primaryBtn]}
-              onPress={() => {
-                onClose();
-                if (onSubscribe) {
-                  onSubscribe();
-                  return;
-                }
-                router.push("/subscribe");
-              }}
-            >
-              <Crown size={16} color={Palette.white} />
-              <Text style={modalStyles.primaryBtnText}>{"Obuna bo'lish"}</Text>
-            </Pressable>
+            <View style={modalStyles.btnRow}>
+              <Pressable
+                style={[modalStyles.btn, modalStyles.primaryBtn]}
+                onPress={() => {
+                  onClose();
+                  if (onSubscribe) {
+                    onSubscribe();
+                    return;
+                  }
+                  router.push("/subscribe");
+                }}
+              >
+                <Crown size={16} color={Palette.white} />
+                <Text style={modalStyles.primaryBtnText}>{"Obuna bo'lish"}</Text>
+              </Pressable>
 
-            <Pressable
-              style={[modalStyles.btn, modalStyles.secondaryBtn]}
-              onPress={() => {
-                if (buySingleLoading) {
-                  return;
-                }
+              <Pressable
+                style={[modalStyles.btn, modalStyles.secondaryBtn]}
+                onPress={() => {
+                  if (buySingleLoading) {
+                    return;
+                  }
 
-                if (onBuySingleArticle) {
-                  onBuySingleArticle();
-                  return;
-                }
+                  if (onBuySingleArticle) {
+                    onBuySingleArticle();
+                    return;
+                  }
 
-                onClose();
-                router.push("/subscribe");
-              }}
-              disabled={buySingleLoading}
-            >
-              {buySingleLoading ? (
-                <ActivityIndicator color={Palette.black} />
-              ) : (
-                <Text style={modalStyles.secondaryBtnText}>Sotib olish</Text>
-              )}
-            </Pressable>
-          </View>
+                  onClose();
+                  router.push("/subscribe");
+                }}
+                disabled={buySingleLoading}
+              >
+                {buySingleLoading ? (
+                  <ActivityIndicator color={Palette.black} />
+                ) : (
+                  <Text style={modalStyles.secondaryBtnText}>Sotib olish</Text>
+                )}
+              </Pressable>
+            </View>
 
-          <Text style={[modalStyles.hint, { color: colors.textMuted }]}>
-            {"29 000 so'm / oy · Istalgan vaqt bekor qiling"}
-          </Text>
+            <Text style={[modalStyles.hint, { color: colors.textMuted }]}>
+              {"29 000 so'm / oy · Istalgan vaqt bekor qiling"}
+            </Text>
+          </ScrollView>
         </View>
       </View>
     </Modal>
@@ -225,13 +232,18 @@ const modalStyles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     paddingHorizontal: 24,
+    paddingVertical: 40,
   },
   card: {
     backgroundColor: Palette.white,
     borderRadius: 24,
-    padding: 28,
     width: "100%",
     maxWidth: 380,
+    maxHeight: "100%" as any,
+    overflow: "hidden",
+  },
+  scrollContent: {
+    padding: 28,
     alignItems: "center",
     gap: 12,
   },
@@ -240,6 +252,7 @@ const modalStyles = StyleSheet.create({
     top: 16,
     right: 16,
     padding: 6,
+    zIndex: 10,
   },
   iconWrap: {
     width: 72,

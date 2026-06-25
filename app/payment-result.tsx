@@ -107,7 +107,7 @@ export default function PaymentResultScreen() {
     <View
       style={[
         styles.wrap,
-        { backgroundColor: colors.background, paddingTop: insets.top + 20 },
+        { backgroundColor: colors.background, paddingTop: insets.top + 20, paddingBottom: insets.bottom },
       ]}
     >
       <Stack.Screen options={{ headerShown: false }} />
@@ -149,11 +149,19 @@ export default function PaymentResultScreen() {
 
               router.replace("/");
             }}
-          > 
+          >
             <Text style={styles.btnText}>
               {normalizedType === "article" && normalizedArticleId
                 ? "Maqolani ochish"
                 : "Asosiy sahifaga qaytish"}
+            </Text>
+          </Pressable>
+          <Pressable
+            style={styles.btnSecondary}
+            onPress={() => router.replace("/(tabs)/profile" as any)}
+          >
+            <Text style={[styles.btnSecondaryText, { color: colors.textSecondary }]}>
+              Profilga o'tish
             </Text>
           </Pressable>
         </View>
