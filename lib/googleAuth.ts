@@ -50,13 +50,13 @@ export function getOAuthErrorFromUrl(url: string): string | null {
   return decodeMessage(params.get("error_description") ?? params.get("error"));
 }
 
-// Primary web sign-in helper — Supabase handles the browser redirect internally.
-// Compatible with detectSessionInUrl: true (no double exchange).
+// Primary web sign-in helper.
+// redirectTo points directly to the destination page (e.g. /subscribe) so
+// Supabase's detectSessionInUrl: true can process the OAuth code right there,
+// avoiding any dependency on /auth/callback timing or routing.
 export async function signInWithGoogle(nextPath = "/subscribe"): Promise<void> {
-  const redirectTo =
-    typeof window !== "undefined" && window.location.origin
-      ? `${window.location.origin}/auth/callback?next=${encodeURIComponent(nextPath)}`
-      : `/auth/callback?next=${encodeURIComponent(nextPath)}`;
+  const origin = typeof window !== "undefined" ? window.location.origin : "";
+  const redirectTo = `${origin}${nextPath.startsWith("/") ? nextPath : `/${nextPath}`}`;
 
   const { error } = await supabase.auth.signInWithOAuth({
     provider: "google",
@@ -69,7 +69,7 @@ export async function signInWithGoogle(nextPath = "/subscribe"): Promise<void> {
   // Supabase calls window.location.assign internally — page navigates away.
 }
 
-// Kept for internal use by beginGoogleSignInOnMobile (native WebBrowser flow).
+// Thin shim kept for any callers that still reference beginGoogleSignInOnWeb.
 export async function beginGoogleSignInOnWeb(next?: string | null): Promise<void> {
   await signInWithGoogle(next ?? "/subscribe");
 }

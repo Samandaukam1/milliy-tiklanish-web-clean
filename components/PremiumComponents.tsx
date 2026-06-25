@@ -13,7 +13,12 @@ import {
   useWindowDimensions,
 } from "react-native";
 import { Palette } from "@/constants/colors";
-import { Fonts } from "@/constants/fonts";import { useColors } from "@/utils/useColors";
+import { Fonts } from "@/constants/fonts";
+import { signInWithGoogle } from "@/lib/googleAuth";
+import { useApp } from "@/providers/AppProvider";
+import { useColors } from "@/utils/useColors";
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 // ─── Floating Premium Banner (mobile: side FAB, web: sticky sidebar) ─────────
 
 export function PremiumBanner({ visible }: { visible: boolean }) {
@@ -69,6 +74,25 @@ export function PremiumLockModal({
   buySingleLoading?: boolean;
 }) {
   const colors = useColors();
+  const { user } = useApp();
+  const [googleLoading, setGoogleLoading] = useState(false);
+  const isAuthenticated = Boolean(user && UUID_RE.test(user.id));
+
+  const handleGoogleSignIn = async () => {
+    setGoogleLoading(true);
+    try {
+      if (Platform.OS === "web") {
+        await signInWithGoogle("/subscribe");
+        // Page navigates away — no cleanup needed.
+      } else {
+        onClose();
+        router.push("/subscribe");
+      }
+    } catch {
+      setGoogleLoading(false);
+    }
+  };
+
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
       <View style={modalStyles.backdrop}>
@@ -87,54 +111,70 @@ export function PremiumLockModal({
             </View>
 
             <Text style={[modalStyles.title, { color: colors.text }]}>Premium Maqola</Text>
-            <Text style={[modalStyles.desc, { color: colors.textSecondary }]}>
-              {"Bu maqola faqat premium obunachilarga mavjud. Premiumga obuna bo'ling yoki faqat shu maqolani sotib oling."}
-            </Text>
 
-            <View style={modalStyles.btnRow}>
-              <Pressable
-                style={[modalStyles.btn, modalStyles.primaryBtn]}
-                onPress={() => {
-                  onClose();
-                  if (onSubscribe) {
-                    onSubscribe();
-                    return;
-                  }
-                  router.push("/subscribe");
-                }}
-              >
-                <Crown size={16} color={Palette.white} />
-                <Text style={modalStyles.primaryBtnText}>{"Obuna bo'lish"}</Text>
-              </Pressable>
+            {!isAuthenticated ? (
+              <>
+                <Text style={[modalStyles.desc, { color: colors.textSecondary }]}>
+                  {"Bu maqola faqat premium obunachilarga mavjud. Davom etish uchun Google orqali tizimga kiring."}
+                </Text>
+                <Pressable
+                  style={[modalStyles.btn, modalStyles.googleBtn]}
+                  onPress={handleGoogleSignIn}
+                  disabled={googleLoading}
+                >
+                  {googleLoading ? (
+                    <ActivityIndicator color={Palette.white} />
+                  ) : (
+                    <>
+                      <Text style={modalStyles.googleBtnG}>G</Text>
+                      <Text style={modalStyles.primaryBtnText}>Google orqali kirish</Text>
+                    </>
+                  )}
+                </Pressable>
+                <Text style={[modalStyles.hint, { color: colors.textMuted }]}>
+                  {"Kirganingizdan so'ng obuna bo'lishingiz mumkin"}
+                </Text>
+              </>
+            ) : (
+              <>
+                <Text style={[modalStyles.desc, { color: colors.textSecondary }]}>
+                  {"Bu maqola faqat premium obunachilarga mavjud. Premiumga obuna bo'ling yoki faqat shu maqolani sotib oling."}
+                </Text>
+                <View style={modalStyles.btnRow}>
+                  <Pressable
+                    style={[modalStyles.btn, modalStyles.primaryBtn]}
+                    onPress={() => {
+                      onClose();
+                      if (onSubscribe) { onSubscribe(); return; }
+                      router.push("/subscribe");
+                    }}
+                  >
+                    <Crown size={16} color={Palette.white} />
+                    <Text style={modalStyles.primaryBtnText}>{"Obuna bo'lish"}</Text>
+                  </Pressable>
 
-              <Pressable
-                style={[modalStyles.btn, modalStyles.secondaryBtn]}
-                onPress={() => {
-                  if (buySingleLoading) {
-                    return;
-                  }
-
-                  if (onBuySingleArticle) {
-                    onBuySingleArticle();
-                    return;
-                  }
-
-                  onClose();
-                  router.push("/subscribe");
-                }}
-                disabled={buySingleLoading}
-              >
-                {buySingleLoading ? (
-                  <ActivityIndicator color={Palette.black} />
-                ) : (
-                  <Text style={modalStyles.secondaryBtnText}>Sotib olish</Text>
-                )}
-              </Pressable>
-            </View>
-
-            <Text style={[modalStyles.hint, { color: colors.textMuted }]}>
-              {"29 000 so'm / oy · Istalgan vaqt bekor qiling"}
-            </Text>
+                  <Pressable
+                    style={[modalStyles.btn, modalStyles.secondaryBtn]}
+                    onPress={() => {
+                      if (buySingleLoading) return;
+                      if (onBuySingleArticle) { onBuySingleArticle(); return; }
+                      onClose();
+                      router.push("/subscribe");
+                    }}
+                    disabled={buySingleLoading}
+                  >
+                    {buySingleLoading ? (
+                      <ActivityIndicator color={Palette.black} />
+                    ) : (
+                      <Text style={modalStyles.secondaryBtnText}>Sotib olish</Text>
+                    )}
+                  </Pressable>
+                </View>
+                <Text style={[modalStyles.hint, { color: colors.textMuted }]}>
+                  {"29 000 so'm / oy · Istalgan vaqt bekor qiling"}
+                </Text>
+              </>
+            )}
           </ScrollView>
         </View>
       </View>
@@ -298,6 +338,21 @@ const modalStyles = StyleSheet.create({
     color: Palette.white,
     fontSize: 14,
     fontWeight: "700",
+  },
+  googleBtn: {
+    backgroundColor: "#4285F4",
+    flex: 0,
+    width: "100%",
+    flexDirection: "row",
+    justifyContent: "center",
+    gap: 10,
+  },
+  googleBtnG: {
+    color: Palette.white,
+    fontSize: 18,
+    fontWeight: "900",
+    lineHeight: 22,
+    fontFamily: Fonts.sans,
   },
   secondaryBtn: {
     backgroundColor: Palette.creamDeep,

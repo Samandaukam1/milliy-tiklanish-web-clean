@@ -26,6 +26,7 @@ import {
   getOAuthCodeFromUrl,
   getOAuthErrorFromUrl,
 } from "@/lib/googleAuth";
+import { supabase, loadSupabaseProfile, upsertSupabaseProfile } from "@/lib/supabase";
 
 const DEAL_DURATION_SECONDS = 59 * 60 + 12;
 
@@ -65,6 +66,57 @@ export default function SubscribeScreen() {
   const dealDeadlineRef = useRef(Date.now() + DEAL_DURATION_SECONDS * 1000);
   const cardGlow = useRef(new Animated.Value(0)).current;
   const ctaPulse = useRef(new Animated.Value(0)).current;
+
+  // Stable refs so the session-handling callback never captures stale values.
+  const loginRef = useRef(login);
+  loginRef.current = login;
+  const isAuthRef = useRef(isAuthenticated);
+  isAuthRef.current = isAuthenticated;
+
+  // When the user arrives after a Google OAuth redirect, the URL contains
+  // ?code=... which Supabase (detectSessionInUrl: true) exchanges automatically.
+  // We actively check getSession() + subscribe to onAuthStateChange here so
+  // we can upsert the profile (needed for first-time Google users) and sync
+  // AppProvider without relying on /auth/callback.
+  useEffect(() => {
+    const handleSession = async (session: any) => {
+      if (!session?.user || isAuthRef.current) return;
+      const authUser = session.user;
+      try {
+        let profile = await loadSupabaseProfile(authUser.id);
+        if (!profile) {
+          const displayName: string | null =
+            authUser.user_metadata?.full_name ??
+            authUser.user_metadata?.name ??
+            (typeof authUser.email === "string" ? authUser.email.split("@")[0] : null) ??
+            null;
+          const avatarUrl: string | null =
+            authUser.user_metadata?.avatar_url ??
+            authUser.user_metadata?.picture ??
+            null;
+          profile = await upsertSupabaseProfile(authUser.id, {
+            phone: authUser.phone || authUser.email || `google:${authUser.id}`,
+            phone_verified: Boolean(authUser.phone),
+            name: displayName,
+            email: authUser.email ?? null,
+            avatar_url: avatarUrl,
+            provider: "google",
+          });
+        }
+        if (profile) loginRef.current(profile);
+      } catch {}
+    };
+
+    // Check immediately — detectSessionInUrl may have already exchanged the code.
+    supabase.auth.getSession().then(({ data }) => handleSession(data.session));
+
+    // Catch SIGNED_IN that fires after mount (code exchange completes async).
+    const { data: { subscription: authSub } } = supabase.auth.onAuthStateChange((event, session) => {
+      if (event === "SIGNED_IN" && session) handleSession(session);
+    });
+
+    return () => authSub.unsubscribe();
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     const updateRemaining = () => {
