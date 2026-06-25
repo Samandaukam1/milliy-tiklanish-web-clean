@@ -11,6 +11,8 @@ import {
   type PaymentType,
 } from "../../lib/server/payme";
 
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 type ServerlessRequest = {
   method?: string;
   body?: unknown;
@@ -103,6 +105,14 @@ export default async function handler(req: ServerlessRequest, res: ServerlessRes
 
     if (!userId || !returnUrlBase || (type !== "subscription" && type !== "article")) {
       sendJson(res, 400, { error: "Missing required fields" });
+      return;
+    }
+
+    if (!UUID_RE.test(userId)) {
+      sendJson(res, 401, {
+        error: "AUTH_REQUIRED",
+        message: "Obuna bo'lish uchun avval ro'yxatdan o'ting yoki tizimga kiring.",
+      });
       return;
     }
 

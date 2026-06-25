@@ -22,6 +22,23 @@ import { createPaymePayment, getReturnUrlBase } from "@/lib/payments";
 
 const DEAL_DURATION_SECONDS = 59 * 60 + 12;
 
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+function isValidUuid(id: string | null | undefined): boolean {
+  return typeof id === "string" && UUID_RE.test(id);
+}
+
+function showAuthRequiredAlert() {
+  Alert.alert(
+    "Kirish talab qilinadi",
+    "Obuna bo'lish uchun avval ro'yxatdan o'ting yoki tizimga kiring.",
+    [
+      { text: "Ro'yxatdan o'tish", onPress: () => router.push("/register") },
+      { text: "Tizimga kirish", onPress: () => router.push("/login") },
+      { text: "Bekor qilish", style: "cancel" },
+    ]
+  );
+}
+
 const PREMIUM_FEATURES = [
   "Premium maqolalarni cheklovlarsiz o'qish",
   "Gazetaning PDF sonlarini yuklab olish",
@@ -106,10 +123,15 @@ export default function SubscribeScreen() {
   }, [cardGlow, ctaPulse]);
 
   const onSubscribe = async () => {
+    if (!user || !isValidUuid(user.id)) {
+      showAuthRequiredAlert();
+      return;
+    }
+
     setPaymentLoading(true);
     try {
       const returnUrlBase = getReturnUrlBase();
-      const userId = user?.id || deviceUserId || ("u-" + Date.now().toString(36));
+      const userId = user.id;
 
       const result = await createPaymePayment({
         userId,
@@ -117,6 +139,11 @@ export default function SubscribeScreen() {
         tier: "premium",
         returnUrlBase,
       });
+
+      if (result.error === "AUTH_REQUIRED") {
+        showAuthRequiredAlert();
+        return;
+      }
 
       if (result.error || !result.payment_url || !result.payment_id) {
         Alert.alert(

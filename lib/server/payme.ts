@@ -481,10 +481,16 @@ export async function getPendingPremiumMonthlyPayment(
   return normalizePaymentRecord(data as Record<string, unknown>);
 }
 
+const _UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 export async function createPremiumMonthlyPayment(
   admin: SupabaseClient,
   input: PremiumMonthlyPaymeAccount
 ): Promise<PaymentRecord> {
+  if (!_UUID_RE.test(input.userId)) {
+    throw new Error("AUTH_REQUIRED");
+  }
+
   const now = new Date().toISOString();
   const metadata = {
     user_id: input.userId,
