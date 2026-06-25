@@ -111,7 +111,7 @@ export default async function handler(req: ServerlessRequest, res: ServerlessRes
     if (!UUID_RE.test(userId)) {
       sendJson(res, 401, {
         error: "AUTH_REQUIRED",
-        message: "Obuna bo'lish uchun avval ro'yxatdan o'ting yoki tizimga kiring.",
+        message: "Obuna bo'lish uchun avval Google orqali tizimga kiring.",
       });
       return;
     }

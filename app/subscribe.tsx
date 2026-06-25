@@ -19,24 +19,19 @@ import { Fonts } from "@/constants/fonts";
 import { useApp } from "@/providers/AppProvider";
 import { useColors } from "@/utils/useColors";
 import { createPaymePayment, getReturnUrlBase } from "@/lib/payments";
+import {
+  beginGoogleSignInOnWeb,
+  beginGoogleSignInOnMobile,
+  completeGoogleSignIn,
+  getOAuthCodeFromUrl,
+  getOAuthErrorFromUrl,
+} from "@/lib/googleAuth";
 
 const DEAL_DURATION_SECONDS = 59 * 60 + 12;
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 function isValidUuid(id: string | null | undefined): boolean {
   return typeof id === "string" && UUID_RE.test(id);
-}
-
-function showAuthRequiredAlert() {
-  Alert.alert(
-    "Kirish talab qilinadi",
-    "Obuna bo'lish uchun avval ro'yxatdan o'ting yoki tizimga kiring.",
-    [
-      { text: "Ro'yxatdan o'tish", onPress: () => router.push("/register") },
-      { text: "Tizimga kirish", onPress: () => router.push("/login") },
-      { text: "Bekor qilish", style: "cancel" },
-    ]
-  );
 }
 
 const PREMIUM_FEATURES = [
@@ -59,11 +54,13 @@ function formatCountdown(totalSeconds: number): string {
 }
 
 export default function SubscribeScreen() {
-  const { deviceUserId, user, subscription } = useApp();
+  const { user, subscription, login } = useApp();
   const colors = useColors();
   const insets = useSafeAreaInsets();
   const isPremiumActive = subscription === "premium" || subscription === "pro";
+  const isAuthenticated = Boolean(user && isValidUuid(user.id));
   const [paymentLoading, setPaymentLoading] = useState(false);
+  const [googleSignInLoading, setGoogleSignInLoading] = useState(false);
   const [dealSecondsLeft, setDealSecondsLeft] = useState(DEAL_DURATION_SECONDS);
   const dealDeadlineRef = useRef(Date.now() + DEAL_DURATION_SECONDS * 1000);
   const cardGlow = useRef(new Animated.Value(0)).current;
@@ -122,9 +119,32 @@ export default function SubscribeScreen() {
     };
   }, [cardGlow, ctaPulse]);
 
+  const handleGoogleSignIn = async () => {
+    setGoogleSignInLoading(true);
+    try {
+      if (Platform.OS === "web") {
+        await beginGoogleSignInOnWeb("/subscribe");
+        // Page navigates away — loading state remains until redirect
+        return;
+      }
+      const callbackUrl = await beginGoogleSignInOnMobile();
+      const code = getOAuthCodeFromUrl(callbackUrl);
+      if (!code) {
+        const errMsg = getOAuthErrorFromUrl(callbackUrl) ?? "Google orqali kirishda xatolik yuz berdi";
+        Alert.alert("Xatolik", errMsg);
+        return;
+      }
+      const profile = await completeGoogleSignIn(code);
+      login(profile);
+    } catch (e) {
+      Alert.alert("Xatolik", e instanceof Error ? e.message : "Google orqali kirishda xatolik yuz berdi");
+    } finally {
+      setGoogleSignInLoading(false);
+    }
+  };
+
   const onSubscribe = async () => {
     if (!user || !isValidUuid(user.id)) {
-      showAuthRequiredAlert();
       return;
     }
 
@@ -141,7 +161,10 @@ export default function SubscribeScreen() {
       });
 
       if (result.error === "AUTH_REQUIRED") {
-        showAuthRequiredAlert();
+        Alert.alert(
+          "Kirish talab qilinadi",
+          "Obuna bo'lish uchun avval Google orqali tizimga kiring."
+        );
         return;
       }
 
@@ -297,14 +320,45 @@ export default function SubscribeScreen() {
           </Animated.View>
         </View>
 
-        <Text style={styles.paymentsLbl}>{"TO'LOV USULLARI"}</Text>
-        <View style={styles.paymentsRow}>
-          {["Payme", "Payme QR", "Uzcard", "Humo"].map((p) => (
-            <View key={p} style={[styles.payment, { backgroundColor: colors.card, borderColor: colors.border }]}>
-              <Text style={[styles.paymentText, { color: colors.text }]}>{p}</Text>
+        {!isAuthenticated && (
+          <View style={[styles.authCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+            <Text style={[styles.authCardTitle, { color: colors.text }]}>Avval tizimga kiring</Text>
+            <Text style={[styles.authCardText, { color: colors.textSecondary }]}>
+              {"Premium obunani faollashtirish uchun Google orqali ro'yxatdan o'ting yoki tizimga kiring."}
+            </Text>
+            <Pressable
+              onPress={handleGoogleSignIn}
+              disabled={googleSignInLoading}
+              style={({ pressed }: any) => [
+                styles.googleBtn,
+                pressed && { opacity: 0.85 },
+                googleSignInLoading && { opacity: 0.7 },
+              ]}
+            >
+              {googleSignInLoading ? (
+                <ActivityIndicator color={Palette.white} />
+              ) : (
+                <>
+                  <Text style={styles.googleBtnG}>G</Text>
+                  <Text style={styles.googleBtnText}>Google orqali kirish</Text>
+                </>
+              )}
+            </Pressable>
+          </View>
+        )}
+
+        {isAuthenticated && (
+          <>
+            <Text style={styles.paymentsLbl}>{"TO'LOV USULLARI"}</Text>
+            <View style={styles.paymentsRow}>
+              {["Payme", "Payme QR", "Uzcard", "Humo"].map((p) => (
+                <View key={p} style={[styles.payment, { backgroundColor: colors.card, borderColor: colors.border }]}>
+                  <Text style={[styles.paymentText, { color: colors.text }]}>{p}</Text>
+                </View>
+              ))}
             </View>
-          ))}
-        </View>
+          </>
+        )}
 
         <Text style={[styles.legal, { color: colors.textMuted }]}>
           {"Obunani istalgan vaqtda bekor qilishingiz mumkin.\nTo'lov Payme orqali xavfsiz amalga oshiriladi."}
@@ -317,6 +371,27 @@ export default function SubscribeScreen() {
             <Crown size={18} color={Palette.white} fill={Palette.white} />
             <Text style={styles.ctaText}>Premium faol</Text>
           </View>
+        ) : !isAuthenticated ? (
+          <Pressable
+            onPress={handleGoogleSignIn}
+            disabled={googleSignInLoading}
+            style={({ pressed }: any) => [
+              styles.cta,
+              styles.ctaGoogle,
+              pressed && { opacity: 0.85 },
+              googleSignInLoading && { opacity: 0.7 },
+            ]}
+            testID="sub-google"
+          >
+            {googleSignInLoading ? (
+              <ActivityIndicator color={Palette.white} />
+            ) : (
+              <>
+                <Text style={styles.googleBtnGFooter}>G</Text>
+                <Text style={styles.ctaText}>Google orqali kirish</Text>
+              </>
+            )}
+          </Pressable>
         ) : (
           <Animated.View
             style={[
@@ -573,4 +648,57 @@ const styles = StyleSheet.create({
     transform: [{ scale: 0.97 }],
   },
   ctaText: { color: Palette.white, fontWeight: "900", fontSize: 15 },
+  ctaGoogle: {
+    backgroundColor: "#4285F4",
+  },
+  // Auth-required card (body)
+  authCard: {
+    marginTop: 24,
+    borderRadius: 16,
+    borderWidth: 1,
+    padding: 20,
+    gap: 12,
+    alignItems: "center",
+  },
+  authCardTitle: {
+    fontSize: 18,
+    fontFamily: Fonts.serif,
+    fontWeight: "800",
+    textAlign: "center",
+  },
+  authCardText: {
+    fontSize: 14,
+    lineHeight: 22,
+    textAlign: "center",
+  },
+  googleBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 10,
+    backgroundColor: "#4285F4",
+    paddingVertical: 14,
+    paddingHorizontal: 24,
+    borderRadius: 10,
+    minHeight: 50,
+    width: "100%",
+  },
+  googleBtnG: {
+    color: Palette.white,
+    fontWeight: "900",
+    fontSize: 18,
+    fontFamily: Fonts.sans,
+    lineHeight: 22,
+  },
+  googleBtnText: {
+    color: Palette.white,
+    fontWeight: "700",
+    fontSize: 15,
+  },
+  googleBtnGFooter: {
+    color: Palette.white,
+    fontWeight: "900",
+    fontSize: 20,
+    lineHeight: 24,
+  },
 });

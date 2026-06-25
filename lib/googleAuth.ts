@@ -15,12 +15,15 @@ function decodeMessage(value: string | null): string | null {
   }
 }
 
-export function getGoogleRedirectTo(): string {
+export function getGoogleRedirectTo(next?: string | null): string {
   if (Platform.OS === "web") {
-    return "http://localhost:8081/auth/callback";
+    const base =
+      typeof window !== "undefined" && window.location.origin
+        ? `${window.location.origin}/auth/callback`
+        : "/auth/callback";
+    return next ? `${base}?next=${encodeURIComponent(next)}` : base;
   }
-
-  return "exp://172.20.10.3:8081/--/auth/callback";
+  return "rork-app://auth/callback";
 }
 
 export function getOAuthCodeFromUrl(url: string): string | null {
@@ -47,8 +50,8 @@ export function getOAuthErrorFromUrl(url: string): string | null {
   return decodeMessage(params.get("error_description") ?? params.get("error"));
 }
 
-export async function beginGoogleSignInOnWeb(): Promise<void> {
-  const redirectTo = getGoogleRedirectTo();
+export async function beginGoogleSignInOnWeb(next?: string | null): Promise<void> {
+  const redirectTo = getGoogleRedirectTo(next);
   console.log("GOOGLE OAUTH redirectTo =", redirectTo);
   const { data, error } = await supabase.auth.signInWithOAuth({
     provider: "google",
@@ -66,11 +69,11 @@ export async function beginGoogleSignInOnWeb(): Promise<void> {
     throw new Error("Google avtorizatsiya havolasi topilmadi");
   }
 
-  window.location.assign(data.url);
+  window.location.href = data.url;
 }
 
 export async function beginGoogleSignInOnMobile(): Promise<string> {
-  const redirectTo = getGoogleRedirectTo();
+  const redirectTo = getGoogleRedirectTo(null);
   console.log("GOOGLE OAUTH redirectTo =", redirectTo);
   const { data, error } = await supabase.auth.signInWithOAuth({
     provider: "google",

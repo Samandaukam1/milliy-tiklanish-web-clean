@@ -15,7 +15,7 @@ function normalizeParam(value: string | string[] | undefined): string | null {
 export default function AuthCallbackScreen() {
   const colors = useColors();
   const { login } = useApp();
-  const params = useLocalSearchParams<{ code?: string; error?: string; error_description?: string }>();
+  const params = useLocalSearchParams<{ code?: string; error?: string; error_description?: string; next?: string }>();
   const [error, setError] = useState<string>("");
   const handledRef = useRef(false);
 
@@ -24,6 +24,7 @@ export default function AuthCallbackScreen() {
     () => normalizeParam(params.error_description) ?? normalizeParam(params.error),
     [params.error, params.error_description]
   );
+  const nextPath = useMemo(() => normalizeParam(params.next) ?? "/(tabs)/profile", [params.next]);
 
   useEffect(() => {
     if (handledRef.current) return;
@@ -44,7 +45,7 @@ export default function AuthCallbackScreen() {
       .then((profile) => {
         if (!mounted) return;
         login(profile);
-        router.replace("/(tabs)/profile");
+        router.replace(nextPath as any);
       })
       .catch((err) => {
         if (!mounted) return;
@@ -54,7 +55,7 @@ export default function AuthCallbackScreen() {
     return () => {
       mounted = false;
     };
-  }, [authError, code, login]);
+  }, [authError, code, login, nextPath]);
 
   return (
     <View style={[styles.page, { backgroundColor: colors.background }]}> 
