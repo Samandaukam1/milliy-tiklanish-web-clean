@@ -50,26 +50,28 @@ export function getOAuthErrorFromUrl(url: string): string | null {
   return decodeMessage(params.get("error_description") ?? params.get("error"));
 }
 
-export async function beginGoogleSignInOnWeb(next?: string | null): Promise<void> {
-  const redirectTo = getGoogleRedirectTo(next);
-  console.log("GOOGLE OAUTH redirectTo =", redirectTo);
-  const { data, error } = await supabase.auth.signInWithOAuth({
+// Primary web sign-in helper — Supabase handles the browser redirect internally.
+// Compatible with detectSessionInUrl: true (no double exchange).
+export async function signInWithGoogle(nextPath = "/subscribe"): Promise<void> {
+  const redirectTo =
+    typeof window !== "undefined" && window.location.origin
+      ? `${window.location.origin}/auth/callback?next=${encodeURIComponent(nextPath)}`
+      : `/auth/callback?next=${encodeURIComponent(nextPath)}`;
+
+  const { error } = await supabase.auth.signInWithOAuth({
     provider: "google",
-    options: {
-      redirectTo,
-      skipBrowserRedirect: true,
-    },
+    options: { redirectTo },
   });
 
   if (error) {
     throw new Error(error.message || "Google orqali kirishda xatolik yuz berdi");
   }
+  // Supabase calls window.location.assign internally — page navigates away.
+}
 
-  if (!data?.url) {
-    throw new Error("Google avtorizatsiya havolasi topilmadi");
-  }
-
-  window.location.href = data.url;
+// Kept for internal use by beginGoogleSignInOnMobile (native WebBrowser flow).
+export async function beginGoogleSignInOnWeb(next?: string | null): Promise<void> {
+  await signInWithGoogle(next ?? "/subscribe");
 }
 
 export async function beginGoogleSignInOnMobile(): Promise<string> {

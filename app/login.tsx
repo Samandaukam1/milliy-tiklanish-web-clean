@@ -16,6 +16,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Palette } from "@/constants/colors";
 import { Fonts } from "@/constants/fonts";
 import { loginUser, normalizeLoginValue } from "@/lib/auth";
+import { signInWithGoogle } from "@/lib/googleAuth";
 import { useApp } from "@/providers/AppProvider";
 import { useColors } from "@/utils/useColors";
 
@@ -31,10 +32,22 @@ export default function LoginScreen() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const [googleLoading, setGoogleLoading] = useState(false);
 
   useEffect(() => {
     setMode(params.mode === "signin" ? "signin" : "entry");
   }, [params.mode]);
+
+  const handleGoogleSignIn = useCallback(async () => {
+    setGoogleLoading(true);
+    try {
+      await signInWithGoogle("/subscribe");
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Google orqali kirishda xatolik yuz berdi");
+    } finally {
+      setGoogleLoading(false);
+    }
+  }, []);
 
   const handleSubmit = useCallback(async () => {
     setLoading(true);
@@ -103,6 +116,27 @@ export default function LoginScreen() {
                 <Pressable onPress={() => router.push("/telegram-login?mode=recovery")} style={styles.linkButton}>
                   <Text style={[styles.linkButtonText, { color: colors.textSecondary }]}>Parolni tiklash</Text>
                 </Pressable>
+
+                <View style={styles.dividerRow}>
+                  <View style={[styles.dividerLine, { backgroundColor: colors.border }]} />
+                  <Text style={[styles.dividerText, { color: colors.textMuted }]}>yoki</Text>
+                  <View style={[styles.dividerLine, { backgroundColor: colors.border }]} />
+                </View>
+
+                <Pressable
+                  onPress={handleGoogleSignIn}
+                  disabled={googleLoading}
+                  style={({ pressed }) => [styles.googleButton, (pressed || googleLoading) && styles.buttonPressed]}
+                >
+                  {googleLoading ? (
+                    <ActivityIndicator color={Palette.white} />
+                  ) : (
+                    <>
+                      <Text style={styles.googleButtonG}>G</Text>
+                      <Text style={styles.googleButtonText}>Google orqali kirish</Text>
+                    </>
+                  )}
+                </Pressable>
               </View>
             ) : (
               <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}> 
@@ -142,6 +176,27 @@ export default function LoginScreen() {
 
                 <Pressable onPress={() => router.push("/telegram-login?mode=recovery")} style={styles.linkButton}>
                   <Text style={[styles.linkButtonText, { color: colors.textSecondary }]}>Parolni tiklash</Text>
+                </Pressable>
+
+                <View style={styles.dividerRow}>
+                  <View style={[styles.dividerLine, { backgroundColor: colors.border }]} />
+                  <Text style={[styles.dividerText, { color: colors.textMuted }]}>yoki</Text>
+                  <View style={[styles.dividerLine, { backgroundColor: colors.border }]} />
+                </View>
+
+                <Pressable
+                  onPress={handleGoogleSignIn}
+                  disabled={googleLoading}
+                  style={({ pressed }) => [styles.googleButton, (pressed || googleLoading) && styles.buttonPressed]}
+                >
+                  {googleLoading ? (
+                    <ActivityIndicator color={Palette.white} />
+                  ) : (
+                    <>
+                      <Text style={styles.googleButtonG}>G</Text>
+                      <Text style={styles.googleButtonText}>Google orqali kirish</Text>
+                    </>
+                  )}
                 </Pressable>
               </View>
             )}
@@ -292,5 +347,41 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: "600",
     lineHeight: 18,
+  },
+  dividerRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+  },
+  dividerLine: {
+    flex: 1,
+    height: 1,
+  },
+  dividerText: {
+    fontFamily: Fonts.sans,
+    fontSize: 13,
+  },
+  googleButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 10,
+    backgroundColor: "#4285F4",
+    borderRadius: 18,
+    minHeight: 54,
+    paddingHorizontal: 20,
+  },
+  googleButtonG: {
+    color: Palette.white,
+    fontFamily: Fonts.sans,
+    fontSize: 20,
+    fontWeight: "900",
+    lineHeight: 24,
+  },
+  googleButtonText: {
+    color: Palette.white,
+    fontFamily: Fonts.sans,
+    fontSize: 16,
+    fontWeight: "700",
   },
 });

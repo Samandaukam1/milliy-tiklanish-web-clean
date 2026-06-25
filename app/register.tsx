@@ -19,6 +19,7 @@ import { InterestSelector } from "@/components/InterestSelector";
 import { Palette } from "@/constants/colors";
 import { Fonts } from "@/constants/fonts";
 import { normalizeLoginValue, registerUser, validatePassword } from "@/lib/auth";
+import { signInWithGoogle } from "@/lib/googleAuth";
 import { fetchCategories } from "@/lib/services";
 import type { AppCategory } from "@/lib/types";
 import { useApp } from "@/providers/AppProvider";
@@ -81,6 +82,7 @@ export default function RegisterScreen() {
   const [categoriesLoading, setCategoriesLoading] = useState(true);
   const [avatarLoading, setAvatarLoading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [googleLoading, setGoogleLoading] = useState(false);
   const [errors, setErrors] = useState<FormErrors>({});
 
   useEffect(() => {
@@ -150,6 +152,17 @@ export default function RegisterScreen() {
       }));
     } finally {
       setAvatarLoading(false);
+    }
+  }, []);
+
+  const handleGoogleSignIn = useCallback(async () => {
+    setGoogleLoading(true);
+    try {
+      await signInWithGoogle("/subscribe");
+    } catch (e) {
+      setErrors({ general: e instanceof Error ? e.message : "Google orqali kirishda xatolik yuz berdi" });
+    } finally {
+      setGoogleLoading(false);
     }
   }, []);
 
@@ -389,8 +402,29 @@ export default function RegisterScreen() {
                 {submitting ? <ActivityIndicator color={Palette.white} /> : <Text style={styles.primaryButtonText}>Akkount yaratish</Text>}
               </Pressable>
 
-              <Pressable onPress={() => router.push({ pathname: "/login", params: { mode: "signin" } })} style={({ pressed }) => [styles.secondaryButton, { borderColor: colors.border }, pressed && styles.pressed]}> 
+              <Pressable onPress={() => router.push({ pathname: "/login", params: { mode: "signin" } })} style={({ pressed }) => [styles.secondaryButton, { borderColor: colors.border }, pressed && styles.pressed]}>
                 <Text style={[styles.secondaryButtonText, { color: colors.text }]}>Mening akkountim bor</Text>
+              </Pressable>
+
+              <View style={styles.dividerRow}>
+                <View style={[styles.dividerLine, { backgroundColor: colors.border }]} />
+                <Text style={[styles.dividerText, { color: colors.textSecondary }]}>yoki</Text>
+                <View style={[styles.dividerLine, { backgroundColor: colors.border }]} />
+              </View>
+
+              <Pressable
+                onPress={handleGoogleSignIn}
+                disabled={googleLoading}
+                style={({ pressed }) => [styles.googleButton, (pressed || googleLoading) && styles.pressed]}
+              >
+                {googleLoading ? (
+                  <ActivityIndicator color={Palette.white} />
+                ) : (
+                  <>
+                    <Text style={styles.googleButtonG}>G</Text>
+                    <Text style={styles.googleButtonText}>Google orqali kirish</Text>
+                  </>
+                )}
               </Pressable>
             </View>
           </View>
@@ -563,5 +597,41 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: "600",
     lineHeight: 18,
+  },
+  dividerRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+  },
+  dividerLine: {
+    flex: 1,
+    height: 1,
+  },
+  dividerText: {
+    fontFamily: Fonts.sans,
+    fontSize: 13,
+  },
+  googleButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 10,
+    backgroundColor: "#4285F4",
+    borderRadius: 18,
+    minHeight: 54,
+    paddingHorizontal: 20,
+  },
+  googleButtonG: {
+    color: Palette.white,
+    fontFamily: Fonts.sans,
+    fontSize: 20,
+    fontWeight: "900",
+    lineHeight: 24,
+  },
+  googleButtonText: {
+    color: Palette.white,
+    fontFamily: Fonts.sans,
+    fontSize: 16,
+    fontWeight: "700",
   },
 });

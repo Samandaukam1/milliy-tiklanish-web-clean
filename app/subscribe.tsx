@@ -20,7 +20,7 @@ import { useApp } from "@/providers/AppProvider";
 import { useColors } from "@/utils/useColors";
 import { createPaymePayment, getReturnUrlBase } from "@/lib/payments";
 import {
-  beginGoogleSignInOnWeb,
+  signInWithGoogle,
   beginGoogleSignInOnMobile,
   completeGoogleSignIn,
   getOAuthCodeFromUrl,
@@ -123,8 +123,8 @@ export default function SubscribeScreen() {
     setGoogleSignInLoading(true);
     try {
       if (Platform.OS === "web") {
-        await beginGoogleSignInOnWeb("/subscribe");
-        // Page navigates away — loading state remains until redirect
+        await signInWithGoogle("/subscribe");
+        // Supabase navigates the page away — loading state stays until redirect
         return;
       }
       const callbackUrl = await beginGoogleSignInOnMobile();
