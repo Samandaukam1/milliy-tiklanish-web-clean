@@ -1,5 +1,5 @@
 {
-  "buildCommand": "rm -rf dist && mkdir dist && cp maintenance/index.html dist/index.html",
+  "buildCommand": "npx expo export --platform web",
   "outputDirectory": "dist",
   "installCommand": "npm install --legacy-peer-deps",
   "rewrites": [
